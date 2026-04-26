@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-label="IND-CPA left-right game">
+  <rect width="960" height="420" fill="#09090b"/>
+  <rect x="48" y="72" width="260" height="250" rx="8" fill="#18181b" stroke="#3f3f46"/>
+  <rect x="652" y="72" width="260" height="250" rx="8" fill="#18181b" stroke="#3f3f46"/>
+  <rect x="376" y="40" width="208" height="330" rx="8" fill="#111827" stroke="#2563eb"/>
+  <text x="178" y="120" fill="#f4f4f5" font-family="Inter, Arial" font-size="28" text-anchor="middle">Adversary A</text>
+  <text x="480" y="84" fill="#f4f4f5" font-family="Inter, Arial" font-size="26" text-anchor="middle">Challenger</text>
+  <text x="756" y="120" fill="#f4f4f5" font-family="Inter, Arial" font-size="28" text-anchor="middle">Oracle</text>
+  <text x="480" y="134" fill="#cbd5e1" font-family="Inter, Arial" font-size="20" text-anchor="middle">sample key k</text>
+  <text x="480" y="170" fill="#cbd5e1" font-family="Inter, Arial" font-size="20" text-anchor="middle">sample bit b</text>
+  <text x="480" y="218" fill="#facc15" font-family="Inter, Arial" font-size="22" text-anchor="middle">return Encₖ(M_b)</text>
+  <text x="480" y="282" fill="#cbd5e1" font-family="Inter, Arial" font-size="20" text-anchor="middle">A outputs b'</text>
+  <text x="480" y="318" fill="#86efac" font-family="Inter, Arial" font-size="20" text-anchor="middle">wins if b' = b</text>
+  <path d="M308 170 C340 150 344 150 376 170" fill="none" stroke="#67e8f9" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="342" y="138" fill="#67e8f9" font-family="Inter, Arial" font-size="18" text-anchor="middle">(M₀, M₁)</text>
+  <path d="M584 206 C620 190 620 190 652 206" fill="none" stroke="#facc15" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M652 248 C620 268 620 268 584 248" fill="none" stroke="#facc15" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M376 282 C340 302 340 302 308 282" fill="none" stroke="#86efac" stroke-width="4" marker-end="url(#arrow)"/>
+  <text x="620" y="178" fill="#facc15" font-family="Inter, Arial" font-size="18" text-anchor="middle">challenge</text>
+  <text x="620" y="292" fill="#facc15" font-family="Inter, Arial" font-size="18" text-anchor="middle">C*</text>
+  <text x="344" y="326" fill="#86efac" font-family="Inter, Arial" font-size="18" text-anchor="middle">guess b'</text>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="currentColor"/>
+    </marker>
+  </defs>
+</svg>

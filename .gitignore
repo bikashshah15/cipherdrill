@@ -1,0 +1,10 @@
+.next
+node_modules
+data
+cipherdrill.db*
+tsconfig.tsbuildinfo
+*.log
+.env
+.env.local
+drizzle
+.vercel

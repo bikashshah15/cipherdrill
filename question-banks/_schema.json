@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://local.cipherdrill/question-bank.schema.json",
+  "title": "CipherDrill Question Bank",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lectureId",
+    "lectureTitle",
+    "lectureNumber",
+    "topics",
+    "questions"
+  ],
+  "properties": {
+    "lectureId": {
+      "type": "string",
+      "pattern": "^lecture-[0-9]{2}-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "lectureTitle": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lectureNumber": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "topics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/question"
+      }
+    }
+  },
+  "definitions": {
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "difficulty",
+        "topic",
+        "stem",
+        "choices",
+        "correctAnswer",
+        "mechanisticExplanation",
+        "distractorAnalysis",
+        "trapCategories",
+        "diagramRef",
+        "gameRef"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "MECHANISM",
+            "NOT_PROVIDE",
+            "DIAGRAM",
+            "GAME_WALK",
+            "DISTRACTOR_TRAP",
+            "APPLICATION",
+            "SYNTHESIS"
+          ]
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["Foundational", "Core", "Advanced", "Trap"]
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stem": {
+          "type": "string",
+          "minLength": 1
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/definitions/choice"
+          }
+        },
+        "correctAnswer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mechanisticExplanation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "distractorAnalysis": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "trapCategories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "diagramRef": {
+          "type": ["string", "null"]
+        },
+        "gameRef": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

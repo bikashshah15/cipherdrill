@@ -1,0 +1,284 @@
+{
+  "lectureId": "lecture-02-ind-cpa-determinism",
+  "lectureTitle": "IND-CPA, Determinism, and Encryption Games",
+  "lectureNumber": 2,
+  "topics": [
+    "IND-CPA",
+    "deterministic encryption",
+    "randomized encryption",
+    "left-right games",
+    "nonce misuse",
+    "security definitions"
+  ],
+  "questions": [
+    {
+      "id": "L02-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "deterministic encryption",
+      "stem": "A scheme encrypts each plaintext with `C = Enc_k(M)` and uses no nonce, IV, or internal randomness. Why is this structurally incompatible with IND-CPA security for repeated messages?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the attacker can always compute the secret key by submitting chosen plaintexts."
+        },
+        {
+          "id": "B",
+          "text": "Because equal plaintexts produce equal ciphertexts, giving the adversary a test that distinguishes challenge messages."
+        },
+        {
+          "id": "C",
+          "text": "Because deterministic encryption never provides integrity."
+        },
+        {
+          "id": "D",
+          "text": "Because IND-CPA only applies to public-key encryption."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "IND-CPA asks whether a challenge ciphertext hides which of two equal-length messages was encrypted. With deterministic encryption, the adversary can query `Enc_k(M_0)` before the challenge and compare the result to the challenge ciphertext. If they match, the challenge likely encrypted `M_0`; otherwise it encrypted `M_1`. The break comes from **equality leakage**, not key recovery.",
+      "distractorAnalysis": {
+        "A": "Key recovery is stronger than needed and is not implied by determinism. The distinguishing attack only needs ciphertext comparison.",
+        "C": "This is a true concern in general, but it is about integrity, not CPA confidentiality.",
+        "D": "IND-CPA is defined for both symmetric and public-key encryption; the game changes slightly, but the confidentiality property is the same."
+      },
+      "trapCategories": [
+        "mechanism-vs-outcome",
+        "overclaiming-key-recovery"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q02",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "security definitions",
+      "stem": "A symmetric encryption scheme is IND-CPA secure. Which property is **not** provided by that definition alone?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "An eavesdropper should not learn which of two chosen equal-length messages was encrypted."
+        },
+        {
+          "id": "B",
+          "text": "Repeated encryptions of the same message should not be linkable just from ciphertext equality."
+        },
+        {
+          "id": "C",
+          "text": "An active attacker should be unable to modify a ciphertext into another valid ciphertext."
+        },
+        {
+          "id": "D",
+          "text": "The scheme should tolerate chosen-plaintext queries before and after the challenge."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "IND-CPA is a confidentiality game against chosen-plaintext access. It says the challenge ciphertext should not reveal which of two selected messages was encrypted. It does **not** give ciphertext integrity or non-malleability by itself. Those are separate goals, typically handled by authenticated encryption or stronger notions such as IND-CCA plus integrity.",
+      "distractorAnalysis": {
+        "A": "This is the core left-right challenge guarantee of IND-CPA.",
+        "B": "If ciphertext equality exposed repeated plaintexts, a simple chosen-plaintext comparison attack would distinguish.",
+        "D": "CPA security explicitly allows encryption oracle access around the challenge, except for trivial restrictions in some public-key formulations."
+      },
+      "trapCategories": [
+        "confidentiality-vs-integrity",
+        "definition-boundary"
+      ],
+      "diagramRef": null,
+      "gameRef": "ind-cpa-left-right"
+    },
+    {
+      "id": "L02-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "left-right games",
+      "stem": "In the IND-CPA left-right game shown in the diagram, where does the hidden bit `b` affect the experiment?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It selects which secret key is generated."
+        },
+        {
+          "id": "B",
+          "text": "It selects whether the challenge oracle encrypts the left or right message."
+        },
+        {
+          "id": "C",
+          "text": "It selects which adversary is allowed to make encryption queries."
+        },
+        {
+          "id": "D",
+          "text": "It selects whether decryption queries are allowed after the challenge."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The hidden bit `b` is sampled by the challenger and kept fixed for the challenge oracle. When the adversary submits `(M_0, M_1)`, the oracle returns an encryption of `M_b`. The adversary's final job is to guess `b`. The key generation step is independent of `b`.",
+      "distractorAnalysis": {
+        "A": "The key is generated before the challenge bit matters and is not chosen from two alternatives.",
+        "C": "There is one adversary interacting with the experiment. The bit controls the challenge message, not the participant.",
+        "D": "IND-CPA has no decryption oracle. Mentioning decryption shifts to CCA-style games."
+      },
+      "trapCategories": [
+        "game-role-confusion",
+        "cpa-vs-cca"
+      ],
+      "diagramRef": "ind-cpa-game",
+      "gameRef": "ind-cpa-left-right"
+    },
+    {
+      "id": "L02-Q04",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "IND-CPA",
+      "stem": "An adversary against deterministic encryption first queries the encryption oracle on `M_0`, then submits challenge pair `(M_0, M_1)` with equal lengths. What should the adversary compare after receiving the challenge ciphertext `C*`?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Compare `C*` with the prior ciphertext for `M_0`; equality suggests `b = 0`."
+        },
+        {
+          "id": "B",
+          "text": "Compare the lengths of `M_0` and `M_1`; the longer one determines `b`."
+        },
+        {
+          "id": "C",
+          "text": "Decrypt `C*` using the CPA oracle."
+        },
+        {
+          "id": "D",
+          "text": "Run brute force over all keys until one maps `M_0` to `C*`."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "For deterministic encryption under the same key, `Enc_k(M_0)` is a stable value. A pre-challenge query gives the adversary a reference ciphertext. If `C*` equals that reference, the challenge encrypted `M_0`; if not, it encrypted `M_1` except for negligible collision edge cases in well-formed schemes.",
+      "distractorAnalysis": {
+        "B": "The IND-CPA challenge requires equal-length messages exactly to remove length as a trivial distinguisher.",
+        "C": "CPA gives encryption access, not decryption access.",
+        "D": "The attack is efficient and does not rely on key search."
+      },
+      "trapCategories": [
+        "oracle-capability-confusion",
+        "length-leakage-confusion"
+      ],
+      "diagramRef": "ind-cpa-game",
+      "gameRef": "ind-cpa-left-right"
+    },
+    {
+      "id": "L02-Q05",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "nonce misuse",
+      "stem": "A student says: \"Reusing a nonce in CTR mode reveals the secret key.\" What is the best critique?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Correct: nonce reuse always makes the block-cipher key algebraically recoverable."
+        },
+        {
+          "id": "B",
+          "text": "Incorrect: nonce reuse repeats the keystream, so XORing ciphertexts cancels it and leaks `M_1 \\oplus M_2`; this is not the same as key recovery."
+        },
+        {
+          "id": "C",
+          "text": "Incorrect: CTR mode remains IND-CPA secure as long as the nonce is public."
+        },
+        {
+          "id": "D",
+          "text": "Correct only when both plaintexts are shorter than one block."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "CTR encryption computes `C_i = M_i \\oplus F_k(nonce || counter_i)`. Reusing the same nonce and key repeats the same keystream. Then `C_i \\oplus C'_i = M_i \\oplus M'_i`. That can reveal large amounts of information, especially with known plaintext, but it is not a direct recovery of `k`.",
+      "distractorAnalysis": {
+        "A": "This is the overclaim. The failure is keystream reuse, not automatic block-cipher key recovery.",
+        "C": "Public nonces are fine only when they are unique as required by the scheme.",
+        "D": "The problem is structural and applies wherever the keystream is reused, not only to a one-block edge case."
+      },
+      "trapCategories": [
+        "overclaiming-key-recovery",
+        "nonce-uniqueness",
+        "mechanism-vs-outcome"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q06",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "randomized encryption",
+      "stem": "A developer wants encrypted database rows for a low-entropy field `status ∈ {paid, unpaid, disputed}`. They propose deterministic encryption so the database can search exact ciphertexts. What is the strongest confidentiality objection?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Deterministic encryption makes all ciphertexts invalid unless they include a MAC."
+        },
+        {
+          "id": "B",
+          "text": "Equal statuses will have equal ciphertexts, so frequency and equality patterns leak, especially for a tiny message space."
+        },
+        {
+          "id": "C",
+          "text": "The database can infer the AES key from three possible messages."
+        },
+        {
+          "id": "D",
+          "text": "Randomized encryption would reveal the row order, so deterministic encryption is safer."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "For low-entropy fields, deterministic encryption leaks equality patterns and frequencies. Even without decrypting, an observer can group identical values and often map groups to likely meanings from context. Searchability is a real engineering goal, but it trades away strong semantic security unless paired with a carefully designed searchable-encryption approach and a clear leakage profile.",
+      "distractorAnalysis": {
+        "A": "Authenticity is separate from whether a ciphertext can be stored or compared.",
+        "C": "A small message space enables guessing and frequency attacks, not automatic AES key recovery.",
+        "D": "Randomized encryption is normally the confidentiality-preserving move; row order is a database metadata issue, not a reason deterministic encryption is safer."
+      },
+      "trapCategories": [
+        "low-entropy-domain",
+        "confidentiality-vs-integrity",
+        "searchability-tradeoff"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q07",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "security definitions",
+      "stem": "Which statement best synthesizes the relationship among randomness, determinism, and IND-CPA security?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Randomness automatically implies IND-CPA security, regardless of how it is used."
+        },
+        {
+          "id": "B",
+          "text": "Determinism is always safe if the key remains secret."
+        },
+        {
+          "id": "C",
+          "text": "IND-CPA requires that chosen-plaintext challenge ciphertexts not be distinguishable; randomness or unique nonces are mechanisms that can hide equality, but only when used correctly."
+        },
+        {
+          "id": "D",
+          "text": "IND-CPA mainly prevents ciphertext modification, while randomness mainly prevents key leakage."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "IND-CPA is a game-based confidentiality definition. Random coins, IVs, or nonces are common mechanisms for making encryptions of the same plaintext unlinkable. But the mechanism must be bound to a secure construction: predictable randomness, reused nonces in stream-like modes, or malformed composition can still fail the definition.",
+      "distractorAnalysis": {
+        "A": "Randomness is a tool, not a proof. Badly used randomness can leave a scheme distinguishable.",
+        "B": "A secret key does not hide equality leakage in deterministic encryption under chosen-plaintext access.",
+        "D": "This swaps properties: modification resistance is integrity/non-malleability, and key leakage is not the usual randomness guarantee."
+      },
+      "trapCategories": [
+        "definition-boundary",
+        "randomness-as-magic",
+        "confidentiality-vs-integrity"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}
