@@ -1,0 +1,1097 @@
+{
+  "lectureId": "lecture-01-intro-security-principles",
+  "lectureTitle": "Intro & Security Principles",
+  "lectureNumber": 1,
+  "topics": [
+    "A vendor advertises that their messaging app is",
+    "A system relies only on prevention — strong",
+    "A student writes: \"The TCB is the part",
+    "The reference monitor must be (1) tamper-proof, (2)",
+    "The reference monitor diagram is Subject → Monitor",
+    "The uTorrent installer parable: the official installer bundled",
+    "The bear-and-hiker parable: two hikers see a bear",
+    "A startup ships a product without publishing the",
+    "Apply the Name the Threat Model procedure to",
+    "Why do least privilege and separation of responsibility",
+    "A system enforces complete mediation — every access",
+    "The TCB Venn shows a small inner region",
+    "Snow path + cars parable: a snowplow clears",
+    "Walk Apply the Principles on: a hospital records",
+    "A team adds a firewall, an IDS, antivirus",
+    "Why does fail-safe defaults (deny when in doubt)",
+    "The CIA triad diagram extends to include Authentication",
+    "\"Detect if you can't prevent\" applies most strongly",
+    "A SaaS team retrofits security after launch by",
+    "Walk Fail-Safe Defaults on a login system. Identify",
+    "A small TCB is required to be correct",
+    "The course-structure map (Crypto → Web → Network",
+    "A security architect says, \"we use multi-factor authentication",
+    "A vendor markets a \"zero-trust\" architecture as one",
+    "A bank deploys a single ML fraud-detection model",
+    "The CIA triad-plus diagram (CIA + Authentication +",
+    "The reference monitor diagram (Subject → Monitor →",
+    "The TCB Venn shows TCB ⊆ System. A"
+  ],
+  "questions": [
+    {
+      "id": "L01-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "A vendor advertises that their messaging app is",
+      "stem": "A vendor advertises that their messaging app is \"end-to-end encrypted and therefore secure.\" A student says the claim is incomplete. Why is the student correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The claim doesn't specify the encryption algorithm."
+        },
+        {
+          "id": "B",
+          "text": "The claim doesn't specify the threat model — without naming the adversary, \"secure\" has no truth value."
+        },
+        {
+          "id": "C",
+          "text": "End-to-end encryption is weaker than transport-layer encryption."
+        },
+        {
+          "id": "D",
+          "text": "The claim doesn't include integrity guarantees."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A security claim is a statement about what an *adversary* cannot do. Without naming who the adversary is and what they can do, \"secure\" is an empty predicate — the same system can be secure against one adversary and broken against another (E2EE protects against the service provider but not against device-level malware on the endpoint).",
+      "distractorAnalysis": {
+        "A": "**Conflates primitive choice with security claim.** Even with AES-256 named, \"secure\" without a threat model still has no truth value.",
+        "C": "**Absolutist comparison.** Neither is universally weaker; they protect against different adversaries.",
+        "D": "**CIA-as-checklist trap.** Adding \"and integrity\" still leaves the claim meaningless without a threat model. Adding more *properties* doesn't fix the absent *adversary*."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q02",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Foundational",
+      "topic": "A system relies only on prevention — strong",
+      "stem": "A system relies *only* on prevention — strong access control, encryption, signed code. The vendor says no other security measures are needed. What does pure prevention NOT provide that a layered (deterrence + prevention + detection + response) strategy does?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Confidentiality of stored data."
+        },
+        {
+          "id": "B",
+          "text": "The ability to learn that a compromise has occurred and bound the damage."
+        },
+        {
+          "id": "C",
+          "text": "Authentication of users."
+        },
+        {
+          "id": "D",
+          "text": "Lower overall system cost."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Prevention can fail *silently*. The four-mode model exists because every preventive control has a non-zero bypass probability — and once bypassed, a pure-prevention system has no signal. Detection and response exist *exactly* to bound damage when prevention fails. \"We don't need detection\" is equivalent to \"prevention has zero failure probability,\" which is never true.",
+      "distractorAnalysis": {
+        "A": "**Capability subtraction trap (A4 archetype).** Prevention *can* provide confidentiality (encryption, ACLs) — the question asks what it can't.",
+        "C": "Same trap — prevention can do authentication (passwords, certs).",
+        "D": "**Cost-irrelevance trap.** Pure prevention is often *more* expensive in failure cost (no early signal = larger blast radius)."
+      },
+      "trapCategories": [
+        "cost-irrelevance",
+        "not-provide-test",
+        "not-provide-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q03",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Foundational",
+      "topic": "A student writes: \"The TCB is the part",
+      "stem": "A student writes: \"The TCB is the part of the system that has the strongest security.\" Why is this wrong?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The TCB has weaker security than the rest of the system."
+        },
+        {
+          "id": "B",
+          "text": "The TCB is the part that *must be correct* for security to hold — it's a *trust assumption* (a structural definition), not a strength claim."
+        },
+        {
+          "id": "C",
+          "text": "The TCB is only relevant in cryptographic systems."
+        },
+        {
+          "id": "D",
+          "text": "The TCB is just a synonym for \"the kernel.\""
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The TCB is the set of components whose correct operation is *necessary and sufficient* to enforce the policy. Calling it \"the strongest\" conflates *responsibility* with *quality*. A weak TCB still defines what must be trusted; the principle \"small TCB = better\" holds because *small means auditable*, not because small means strong.",
+      "distractorAnalysis": {
+        "A": "**Absolutist inversion.** TCB isn't \"weaker\" either — it's defined orthogonally to strength.",
+        "C": "**False scope restriction.** TCB applies to every security architecture (OS, web, network, crypto).",
+        "D": "**Pattern-match trap.** Kernel is *often part of* the TCB but TCB also includes hardware, bootloader, and sometimes specific user-space components."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "distractor-focused",
+        "false-scope",
+        "pattern-match-trap",
+        "role-inversion"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "The reference monitor must be (1) tamper-proof, (2)",
+      "stem": "The reference monitor must be (1) tamper-proof, (2) always invoked (complete mediation), and (3) small enough to verify. Why is \"always invoked\" listed as a *separate* requirement from \"the access check is correct\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the access check might have bugs."
+        },
+        {
+          "id": "B",
+          "text": "Because a perfectly correct check that can be bypassed is equivalent to no check at all — correctness and invocation are *independent* failure modes."
+        },
+        {
+          "id": "C",
+          "text": "Because invocation is faster than verification."
+        },
+        {
+          "id": "D",
+          "text": "Because the reference monitor is itself a tamper target."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A check has two failure modes: (1) the check is wrong (says yes when it should say no), and (2) the check is right but not consulted on every relevant access (TOCTOU, cache-bypass, alternate API path). A 100%-correct check that's bypassed on the admin path provides zero security. Listing \"always invoked\" separately forces designers to verify both axes.",
+      "distractorAnalysis": {
+        "A": "True statement but it's the *correctness* property, not *invocation*. The question asks why these are listed separately.",
+        "C": "**Performance-irrelevance trap.**",
+        "D": "That's the *tamper-proof* property — different requirement."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q05",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "The reference monitor diagram is Subject → Monitor",
+      "stem": "The reference monitor diagram is `Subject → Monitor → Object`. In a UNIX kernel handling a `read(fd)` call, which mapping is correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "(User process, file inode, syscall handler)."
+        },
+        {
+          "id": "B",
+          "text": "(User process, syscall handler / kernel access-control code, file/resource)."
+        },
+        {
+          "id": "C",
+          "text": "(Kernel, user process, file system)."
+        },
+        {
+          "id": "D",
+          "text": "(File, syscall, user process)."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The subject is the *active* requester (process). The monitor is the *enforcement code that consults the policy* (kernel access-control reached via syscall). The object is the *passive resource* (file). The diagram's arrow direction encodes role: subjects act, objects are acted upon, monitor sits in the path.",
+      "distractorAnalysis": {
+        "A": "**Conflates metadata with enforcement.** The inode *carries* permission bits; it doesn't *enforce*.",
+        "C": "**Roles inverted.** The kernel acts as monitor on behalf of policy; the requesting process is the subject.",
+        "D": "Roles entirely reversed; files don't request access to processes."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading",
+        "role-inversion"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q06",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "The uTorrent installer parable: the official installer bundled",
+      "stem": "The uTorrent installer parable: the official installer bundled third-party software (toolbars, optimizers); users clicked \"Next, Next, Next\" and ended up installing what they didn't want. Which principle does this *most precisely* illustrate?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Defense in depth."
+        },
+        {
+          "id": "B",
+          "text": "Human factors — security designs that ignore how users actually behave will fail when users behave the way they always do."
+        },
+        {
+          "id": "C",
+          "text": "Fail-safe defaults — the installer should refuse to run."
+        },
+        {
+          "id": "D",
+          "text": "Least privilege — the installer has too much privilege."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Human factors says the design must account for the user's actual behavior model, not the idealized one. \"Next, Next, Next\" is universal habituation — users skip text on dialog boxes that *always* say \"click Next.\" A design that hides a malware decision behind a normal-looking Next button loses to that habituation every time. The fix isn't training; it's design that doesn't depend on attention the user won't give.",
+      "distractorAnalysis": {
+        "A": "Defense in depth concerns layered defenses, not user behavior.",
+        "C": "**Plausible-but-secondary.** Fail-safe defaults *would* help (default = don't bundle), but the parable's *primary* lesson is the user-behavior model. Fail-safe defaults is one *response* to the human-factors problem, not the principle the story illustrates.",
+        "D": "Least privilege governs *what code can do*, not click-through behavior."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q07",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "The bear-and-hiker parable: two hikers see a bear",
+      "stem": "The bear-and-hiker parable: two hikers see a bear; one runs; the other says \"you can't outrun a bear\"; the first replies, \"I only have to outrun *you*.\" Which principle is this?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Defense in depth."
+        },
+        {
+          "id": "B",
+          "text": "Security is economics — you don't have to be unbreakable, just costlier than the next target."
+        },
+        {
+          "id": "C",
+          "text": "Fail-safe defaults."
+        },
+        {
+          "id": "D",
+          "text": "Complete mediation."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Security-as-economics says attackers attack when expected payoff exceeds expected cost; they generally pick the lowest-cost target meeting their payoff threshold. Defensive job is not \"unbreakable\" (usually impossible), it's \"costlier than the alternative the attacker has.\" Hiker analogy: the bear is unstoppable in principle (you cannot prevent), so you raise *your* cost relative to the next target.",
+      "distractorAnalysis": {
+        "A": "Defense in depth concerns *layering*, not relative cost.",
+        "C": "Fail-safe defaults concerns decision behavior under failure, not adversary economics.",
+        "D": "Complete mediation concerns access path coverage, not cost."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q08",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "A startup ships a product without publishing the",
+      "stem": "A startup ships a product without publishing the protocol design, arguing \"if attackers don't know how it works, they can't break it.\" Which principle does this most directly violate, and why is the reasoning *structurally* flawed?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Least privilege — the protocol grants too much."
+        },
+        {
+          "id": "B",
+          "text": "No security through obscurity (Shannon/Kerckhoffs) — designs leak permanently while keys can be rotated; building security on the secrecy of the *design* leaves no recovery path once the design is out."
+        },
+        {
+          "id": "C",
+          "text": "Defense in depth — the startup needs more layers."
+        },
+        {
+          "id": "D",
+          "text": "Human factors — users won't understand the protocol."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Shannon's maxim: assume the attacker knows your design; secrecy must live in the *key*, not in the *algorithm*. Structural reason: designs are static and leak permanently (reverse engineering, insider, document leak); keys are dynamic and revocable (compromise → rotate). A scheme whose *only* secret is the design has no recovery path.",
+      "distractorAnalysis": {
+        "A": "Privilege levels aren't the issue; the issue is what's secret.",
+        "C": "Adding layers doesn't fix a secret-design dependency at the root.",
+        "D": "**Plausible-but-irrelevant.** True statement that doesn't name the violated principle."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q09",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Apply the Name the Threat Model procedure to",
+      "stem": "Apply the *Name the Threat Model* procedure to: a user installs a self-hosted password manager on their home server. Which actor placement is the *most security-relevant decision*?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Whether the user is in the threat model."
+        },
+        {
+          "id": "B",
+          "text": "Whether the home ISP and any cloud backup provider are in the threat model — moving them in/out determines whether the vault must be E2E-encrypted or whether server-side encryption suffices."
+        },
+        {
+          "id": "C",
+          "text": "Whether the encryption algorithm is AES or ChaCha20."
+        },
+        {
+          "id": "D",
+          "text": "Whether the home server runs Linux or Windows."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Procedure: (1) enumerate actors (user, manager process, OS, ISP, backup provider, LAN attacker); (2) for each, what they observe / modify / compute; (3) mark trusted vs. adversary; (4) state goal *relative to* adversary set. The decision that *most changes the design* is which infrastructure parties are adversaries — that single classification determines whether you need E2EE or whether server-side encryption is enough.",
+      "distractorAnalysis": {
+        "A": "The user is the principal whose data is protected — placing them as adversary is incoherent for this product.",
+        "C": "Algorithm choice is a downstream implementation detail, not a threat-model decision.",
+        "D": "OS choice doesn't change the threat model itself (it changes the TCB, a separate question)."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Why do least privilege and separation of responsibility",
+      "stem": "Why do *least privilege* and *separation of responsibility* protect more strongly when applied *together* than either alone?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "They are equivalent — applying both is redundant."
+        },
+        {
+          "id": "B",
+          "text": "Least privilege bounds damage from *unintended* compromise; separation of responsibility ensures even an *intended* action by one component cannot be catastrophic alone — together they bound both compromised and authorized-but-unsafe action."
+        },
+        {
+          "id": "C",
+          "text": "Least privilege is for users, separation of responsibility is for processes — they don't interact."
+        },
+        {
+          "id": "D",
+          "text": "Together they make the system slower, so attackers have less time."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "They cover complementary failure modes. Least privilege: if a component is compromised, the attacker only inherits that component's minimal rights. Separation of responsibility: even if a component runs *as intended*, no single principal can perform a catastrophic action alone (two-person rule, privilege separation). Together: a compromised component can do little, *and* an authorized-but-malicious one cannot do everything.",
+      "distractorAnalysis": {
+        "A": "Different threat models entirely.",
+        "C": "**False scope split.** Both apply to both.",
+        "D": "Performance is irrelevant."
+      },
+      "trapCategories": [
+        "false-scope",
+        "mechanism-test",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q11",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "A system enforces complete mediation — every access",
+      "stem": "A system enforces *complete mediation* — every access goes through the reference monitor. What does complete mediation NOT provide on its own?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Bypass-resistance."
+        },
+        {
+          "id": "B",
+          "text": "A guarantee that the policy decision the monitor makes is *correct*."
+        },
+        {
+          "id": "C",
+          "text": "Audit logging."
+        },
+        {
+          "id": "D",
+          "text": "Tamper-resistance of the monitor itself."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Complete mediation says the monitor is *consulted on every access* — it does not say the monitor *decides correctly*. A monitor invoked on every request that always returns \"allow\" provides complete mediation and zero protection. The three reference-monitor properties (tamper-proof, always invoked, small/verifiable) are independent; satisfying one says nothing about the other two.",
+      "distractorAnalysis": {
+        "A": "Bypass-resistance is precisely what complete mediation *does* provide — trap reversal.",
+        "C": "Logging is an orthogonal mechanism not implied by mediation.",
+        "D": "Tamper-resistance is a *separate* required property; complete mediation doesn't imply it either."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q12",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "The TCB Venn shows a small inner region",
+      "stem": "The TCB Venn shows a small inner region (TCB) inside the System. A team proposes adding a logging service into the TCB so they can audit security events. What is the *primary security cost*?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Performance overhead from logging."
+        },
+        {
+          "id": "B",
+          "text": "Every bug in the logger is now a security bug — the verification burden grows with the TCB; the auditable surface and attack surface expand."
+        },
+        {
+          "id": "C",
+          "text": "Logs take disk space."
+        },
+        {
+          "id": "D",
+          "text": "The logger could be slow."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Adding to the TCB makes a component's *correctness load-bearing for security*. Cost isn't performance; it's *verification burden* and *attack surface*. Small TCB is verifiable; large TCB is not. Every TCB inclusion should be justified by why the function cannot live outside (privilege-separation argument).",
+      "distractorAnalysis": {
+        "A": "all conflate operational cost with *security* cost. Performance/storage are real but not the security cost the question asks about.",
+        "C": "all conflate operational cost with *security* cost. Performance/storage are real but not the security cost the question asks about.",
+        "D": "all conflate operational cost with *security* cost. Performance/storage are real but not the security cost the question asks about."
+      },
+      "trapCategories": [
+        "conflation",
+        "cost-irrelevance",
+        "diagram-reading",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q13",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Snow path + cars parable: a snowplow clears",
+      "stem": "Snow path + cars parable: a snowplow clears a single narrow path; cars then drive only on the cleared path because driving on snow is harder. Which principle, and what's the security analogue?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Human factors — users take the path of least resistance."
+        },
+        {
+          "id": "B",
+          "text": "Least privilege — the cleared path is the minimum needed; cars don't need the whole lot."
+        },
+        {
+          "id": "C",
+          "text": "Defense in depth — multiple paths exist."
+        },
+        {
+          "id": "D",
+          "text": "Complete mediation — every car must drive on the path."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Least privilege: each component (car) gets the minimum it needs (cleared path) rather than everything available (whole lot). Snow making the off-path expensive is the analogue of *enforcement*: a privilege design that costs the user nothing in scope but blocks anything beyond it.",
+      "distractorAnalysis": {
+        "A": "**Plausible-but-imprecise.** Human factors is \"users *will bypass* annoying security.\" Here users take the easy path *because that's what's permitted* — the *intended* outcome of least privilege, not a bypass.",
+        "C": "Defense in depth concerns layering, not granted scope.",
+        "D": "Complete mediation is about the check itself, not the granted scope."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q14",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Walk Apply the Principles on: a hospital records",
+      "stem": "Walk *Apply the Principles* on: a hospital records system uses a single admin account shared by all on-call doctors with full DB read/write. Which is the *most precise* diagnosis?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "P9 (no obscurity) — the password is shared."
+        },
+        {
+          "id": "B",
+          "text": "P6 (least privilege) violated by full DB write for routine on-call tasks; *and* P7 (separation of responsibility) violated because a single principal (or attacker with the password) can do anything with no second sign-off."
+        },
+        {
+          "id": "C",
+          "text": "P5 (defense in depth) — only one defense layer."
+        },
+        {
+          "id": "D",
+          "text": "P11 (design in security) — security wasn't designed in."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Walk the checklist: enumerate actors, ask each question. P6 fails because a routine on-call doctor doesn't need full DB write. P7 fails because the *shared* admin credential means no separation — one principal acts unilaterally. The professor's pattern rewards the *most specific* principle pair, not catch-all answers.",
+      "distractorAnalysis": {
+        "A": "Sharing a password is bad, but the *structural* issue is the privilege model — naming P9 misses the point.",
+        "C": "Defense in depth is a layering concept; doesn't speak directly to the privilege flaw.",
+        "D": "**Vague meta-principle trap.** True but unhelpful as a diagnosis. Final exam answers must name *specific* principles."
+      },
+      "trapCategories": [
+        "procedural-walkthrough",
+        "vague-meta"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q15",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "A team adds a firewall, an IDS, antivirus",
+      "stem": "A team adds a firewall, an IDS, antivirus, and an EDR product — four different security tools — and claims the system has \"defense in depth.\" Why is this potentially misleading?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Four tools is not enough; defense in depth requires at least five."
+        },
+        {
+          "id": "B",
+          "text": "Defense in depth requires *independent* layers; four tools that share an OS kernel, signature feed, or admin credential will all fail under a single root-condition compromise — depth requires *uncorrelated* failure modes."
+        },
+        {
+          "id": "C",
+          "text": "The tools should be from different vendors."
+        },
+        {
+          "id": "D",
+          "text": "Defense in depth applies only to network security."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Defense in depth's value is *uncorrelated failure*. Four layers that all fail when the same root condition is compromised aren't independent layers — they're one layer with four interfaces. Real depth: kernel ACLs + cryptographic envelope + offline backup. If kernel falls, crypto holds; if crypto leaks, offline backup survives.",
+      "distractorAnalysis": {
+        "A": "**Number-pattern trap.** The principle isn't \"more tools.\"",
+        "C": "Vendor diversity helps but isn't sufficient (still might share an OS, a CVE, or admin creds).",
+        "D": "**False scope restriction.**"
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "false-scope"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Why does fail-safe defaults (deny when in doubt)",
+      "stem": "Why does *fail-safe defaults* (deny when in doubt) protect even when the security mechanism *itself* crashes?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the mechanism restarts automatically."
+        },
+        {
+          "id": "B",
+          "text": "Because the *default* in absence of an authoritative answer is \"deny\" — so a crashed/missing/ambiguous check produces a safe outcome; fail-open systems leak exactly when they're most stressed."
+        },
+        {
+          "id": "C",
+          "text": "Because the OS catches crashes."
+        },
+        {
+          "id": "D",
+          "text": "Because crashed mechanisms produce error messages."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The principle governs *behavior in absence of an authoritative answer*. Crash, missing config, error path, timeout — what happens? Fail-safe answers \"deny.\" Fail-open answers \"allow.\" Attackers target *exactly* the conditions that trigger uncertainty (error paths, retry logic, admin bypass, race windows) because that's where fail-open systems leak.",
+      "distractorAnalysis": {
+        "A": "Restart doesn't address what happens *during* the crash window.",
+        "C": "The OS doesn't make security decisions for the application.",
+        "D": "Error messages are diagnostic, not protective."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q17",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "The CIA triad diagram extends to include Authentication",
+      "stem": "The CIA triad diagram extends to include Authentication and Privacy. Scenario: a hospital encrypts every record at rest, then loses the key escrow during a server migration. Records exist but cannot be read. Which CIA property is *primarily* violated?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Confidentiality — the records are still encrypted."
+        },
+        {
+          "id": "B",
+          "text": "Integrity — the records were modified."
+        },
+        {
+          "id": "C",
+          "text": "Availability — legitimate users can no longer access data they're entitled to read; encryption \"succeeded\" so confidentiality is intact, but the asset is now useless to its owner."
+        },
+        {
+          "id": "D",
+          "text": "None — encryption is working as designed."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Availability is about *legitimate users being able to use the system*. Encryption-with-lost-key is the canonical C-vs-A trade-off going wrong: C is over-enforced (even authorized users can't read), A is destroyed. CIA properties trade off; over-investing in one can destroy another. \"Encrypt everything\" is not \"more secure\" in any total sense.",
+      "distractorAnalysis": {
+        "A": "Confidentiality is preserved — no unauthorized read happened.",
+        "B": "Integrity isn't the issue — bits are unmodified.",
+        "D": "\"Working as designed\" misses that the *security goal* (records usable by authorized users) is unmet."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q18",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "\"Detect if you can't prevent\" applies most strongly",
+      "stem": "\"Detect if you can't prevent\" applies most strongly when prevention is impossible or too expensive. A web service receives 10M login attempts per second from a botnet. Which action *best instantiates* this principle?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Block all IPs from the botnet's country (prevention)."
+        },
+        {
+          "id": "B",
+          "text": "Switch to passkeys so passwords can't be brute-forced (prevention)."
+        },
+        {
+          "id": "C",
+          "text": "Add monitoring + anomaly detection that escalates when failure rates spike, plus rate-limiting and adaptive challenges (detection + response when prevention is partial)."
+        },
+        {
+          "id": "D",
+          "text": "Take the service offline until the attack passes."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "When prevention is partial (you can't block all attackers without blocking real users), you *must* detect: log the anomaly, alert, and respond (rate-limit, captcha, adaptive friction). Detection bounds the *blast radius* of prevention failure. The principle exists because the prevention/detection boundary shifts with attacker capability.",
+      "distractorAnalysis": {
+        "A": "Crude prevention with high false-positive cost; doesn't instantiate \"detect.\"",
+        "B": "Prevention; valuable but not the principle being asked about.",
+        "D": "Self-DoS — surrenders availability to the attacker."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q19",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "A SaaS team retrofits security after launch by",
+      "stem": "A SaaS team retrofits security after launch by adding an API gateway with auth in front of an internal microservice mesh that originally trusted any caller within the VPC. Which two principles were most clearly violated by the *original* design?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "P9 (no obscurity) and P10 (fail-safe)."
+        },
+        {
+          "id": "B",
+          "text": "P11 (design in security from day one) — security wasn't a first-class concern; *and* P8 (complete mediation) — bolting on a perimeter gateway leaves any service-to-service call inside the mesh unmediated."
+        },
+        {
+          "id": "C",
+          "text": "P5 (defense in depth) and P3 (economics)."
+        },
+        {
+          "id": "D",
+          "text": "P2 (human factors) and P6 (least privilege)."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "P11 is violated by the retrofit itself — security architecture wasn't first-class. P8 is violated by the architectural shape: a perimeter gateway leaves internal mesh-to-mesh calls unchecked. They compose: had security been designed in (P11), the architecture would force every service call through mediation (P8). Retrofit usually cannot achieve P8 because the trust boundaries are already wrong.",
+      "distractorAnalysis": {
+        "A": "Obscurity isn't the issue.",
+        "C": "Defense in depth helps but isn't the *primary* violation.",
+        "D": "Human factors and least privilege are tangential."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q20",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Walk Fail-Safe Defaults on a login system. Identify",
+      "stem": "Walk *Fail-Safe Defaults* on a login system. Identify decision points and classify each in the *worst* configuration the procedure should flag.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Login → DB query → response. If the DB is unreachable, return \"logged in\" because the cache says yes."
+        },
+        {
+          "id": "B",
+          "text": "Login → DB query → if DB unreachable, deny (fail-safe). Session validator crash → terminate session (fail-safe). *Admin-bypass flag malformed → treat as enabled (fail-open — the procedure flags this).*"
+        },
+        {
+          "id": "C",
+          "text": "Login → DB query → response. Everything works as designed."
+        },
+        {
+          "id": "D",
+          "text": "Login → cache only — never query DB (unrelated to fail-safe)."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Procedure: (1) enumerate decision points (DB lookup, session validation, admin-bypass parsing); (2) ask the default for each when the decider is missing/crashed/ambiguous; (3) flag any \"allow\" default. The classic trap is the *exception path* — main path fails closed, but admin-bypass parser fails open. Attackers aim straight there.",
+      "distractorAnalysis": {
+        "A": "Single failure mode; doesn't *walk* the procedure.",
+        "C": "Doesn't engage with failure modes at all.",
+        "D": "Misframes the principle."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q21",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Advanced",
+      "topic": "A small TCB is required to be correct",
+      "stem": "A small TCB is required to be correct, complete, and tamper-resistant. What does *shrinking* the TCB NOT automatically provide?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Easier verification."
+        },
+        {
+          "id": "B",
+          "text": "Smaller attack surface."
+        },
+        {
+          "id": "C",
+          "text": "Correctness — a small TCB can still contain bugs; \"small\" reduces the verification *effort* but doesn't guarantee verification was *done* or *succeeded*."
+        },
+        {
+          "id": "D",
+          "text": "Lower line-of-code count."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "\"Small TCB\" is *necessary* for tractable verification but not *sufficient* for correctness. The chain is: small ⇒ verifiable ⇒ (after verification) correct. Skipping the middle step doesn't yield correctness. Lecture's mechanism-over-label point: small is *valuable because it enables* correctness verification, not because it *is* correctness.",
+      "distractorAnalysis": {
+        "A": "are things shrinking the TCB *does* provide — capability-subtraction trap (A4 archetype).",
+        "B": "are things shrinking the TCB *does* provide — capability-subtraction trap (A4 archetype).",
+        "D": "are things shrinking the TCB *does* provide — capability-subtraction trap (A4 archetype)."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q22",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "The course-structure map (Crypto → Web → Network",
+      "stem": "The course-structure map (Crypto → Web → Network → System) sits on top of the Intro/Principles foundation. What exam-time strategy does this layout *signal*?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Memorize each section independently — the layers don't interact."
+        },
+        {
+          "id": "B",
+          "text": "Re-read every section's questions through Lecture 1's lens: name the threat model, name the TCB, locate the reference monitor (or its absence), diagnose which principle was violated."
+        },
+        {
+          "id": "C",
+          "text": "Skip Lecture 1 — it's introductory."
+        },
+        {
+          "id": "D",
+          "text": "Focus only on Crypto since it's the deepest."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The map signals Lecture 1 isn't a one-time topic but a *lens applied to every later topic*. Crypto schemes are TCBs against specified adversaries (IND-CPA = formal threat model). Browser SOP is a reference monitor. Stack canaries are fail-safe defaults. The professor's exam pattern — \"here's a system; diagnose which principle was violated\" — *is* Lecture 1 applied to the section's content.",
+      "distractorAnalysis": {
+        "A": "The diagram's whole point is integration.",
+        "C": "Lecture 1 is the framework every later question plugs into.",
+        "D": "Reduces breadth without justification."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q23",
+      "type": "MECHANISM",
+      "difficulty": "Trap",
+      "topic": "A security architect says, \"we use multi-factor authentication",
+      "stem": "A security architect says, \"we use multi-factor authentication, so we have defense in depth.\" Why is this conflation problematic?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "MFA isn't a security mechanism."
+        },
+        {
+          "id": "B",
+          "text": "MFA is *one* layer (authentication) with multiple *factors*; defense in depth requires *independent layers* across different *defense modes* (auth + authz + monitoring + crypto). Multiple factors within one layer don't compose into depth across layers."
+        },
+        {
+          "id": "C",
+          "text": "MFA is too expensive."
+        },
+        {
+          "id": "D",
+          "text": "MFA breaks fail-safe defaults."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Multiple factors strengthen *one* gate (authentication) by demanding different proofs of identity. Defense in depth requires that *if that gate falls*, another gate (authorization, monitoring, crypto-at-rest, network segmentation) still stands. A breach of the authenticated session (phishing-resistant attack, SIM swap, session-token theft) bypasses every factor at once because they all feed the *same* authenticated session. Real depth asks: even with a valid session, can the attacker reach the data?",
+      "distractorAnalysis": {
+        "A": "MFA is a real mechanism.",
+        "C": "Cost isn't the conflation issue.",
+        "D": "MFA doesn't violate fail-safe defaults."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "A vendor markets a \"zero-trust\" architecture as one",
+      "stem": "A vendor markets a \"zero-trust\" architecture as one that \"trusts nothing.\" From the Lecture 1 framework, why is this slogan structurally impossible, and what's the principled re-statement?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It's literally true — the system trusts nothing."
+        },
+        {
+          "id": "B",
+          "text": "Every system has a TCB — the components whose correctness is *necessary* for security to hold; \"zero trust\" is shorthand for *no implicit trust based on network location* (no perimeter trust), but the system still trusts the IdP, policy engine, hardware root. Re-state as: minimize and explicitly enumerate the TCB; trust nothing implicitly outside it."
+        },
+        {
+          "id": "C",
+          "text": "It means there are no users."
+        },
+        {
+          "id": "D",
+          "text": "It means encryption is used everywhere."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The TCB is *what must be trusted* for the security argument to hold. That set cannot be empty — even verifying a request requires trusting the verifier. \"Zero trust\" in industry means removing *implicit network-location trust* (perimeter assumption), but it explicitly trusts the IdP, policy engine, hardware root, crypto. The framework move: every \"trustless\" claim hides a TCB; ask \"what's in the TCB and is it small?\"",
+      "distractorAnalysis": {
+        "A": "**Absolutist literalism trap.** Slogans aren't formal claims.",
+        "C": "Misreading.",
+        "D": "Encryption ≠ zero trust."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "A bank deploys a single ML fraud-detection model",
+      "stem": "A bank deploys a single ML fraud-detection model behind a load balancer; if the model service is unreachable, all transactions are auto-approved to \"maintain availability.\" Diagnose using Lecture 1 principles. Which is the *most complete* answer?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Only P10 (fail-safe defaults) is violated."
+        },
+        {
+          "id": "B",
+          "text": "Only P5 (defense in depth) is violated."
+        },
+        {
+          "id": "C",
+          "text": "P10 violated (auto-approve = fail-open at the most security-critical decision point); P5 violated (single ML model = single layer with no independent backstop); the C/A trade-off was resolved in favor of A *without compensating controls* — multi-principle compositional failure."
+        },
+        {
+          "id": "D",
+          "text": "Only P8 (complete mediation) is violated."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "The scenario fails on multiple principles, and the high-value diagnostic answer names them with their specific failure mode:\n- **P10:** the default on uncertainty is *allow* — fail-open at exactly the decision the bank pays the model to make.\n- **P5:** a single model is one layer; if it falls, fraud detection ends.\n- **C/A trade-off (Section 2):** availability prioritized at the cost of integrity (fraudulent transactions accepted).\n\nThe professor's pattern (per the forecast playbook) rewards naming *the most specific* set, not the single most famous principle.",
+      "distractorAnalysis": {
+        "A": "each name only one principle — single-principle trap. The compositional answer is what the professor scores high.",
+        "B": "each name only one principle — single-principle trap. The compositional answer is what the professor scores high.",
+        "D": "each name only one principle — single-principle trap. The compositional answer is what the professor scores high."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q26",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "The CIA triad-plus diagram (CIA + Authentication +",
+      "stem": "The CIA triad-plus diagram (CIA + Authentication + Privacy) is meant to force trade-off articulation. A team is designing a contact-tracing app. Which trade-off is *most explicitly* dominant?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Confidentiality vs Availability."
+        },
+        {
+          "id": "B",
+          "text": "Privacy vs Availability — the public-health goal (legitimate use = A) requires the disclosure that violates Privacy; both cannot be maximized simultaneously."
+        },
+        {
+          "id": "C",
+          "text": "Integrity vs Authentication."
+        },
+        {
+          "id": "D",
+          "text": "Confidentiality vs Authentication."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Privacy is \"control over what info about you is exposed and to whom.\" Availability is \"legitimate users can use the system.\" Contact tracing's *purpose* (public-health utility) requires the disclosure (whom-met-whom) that violates Privacy. The diagram exists to force this trade-off into the open before a designer optimizes blindly for one axis.",
+      "distractorAnalysis": {
+        "A": "C-vs-A is real but not the *dominant* trade-off in this scenario.",
+        "C": "Integrity and Authentication are mostly orthogonal here.",
+        "D": "Integrity and Authentication are mostly orthogonal here."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q27",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "The reference monitor diagram (Subject → Monitor →",
+      "stem": "The reference monitor diagram (Subject → Monitor → Object) reappears in three later course topics. Identify the *incorrect* mapping.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Browser Same-Origin Policy: Subject = JS in origin A; Monitor = browser SOP enforcement code; Object = DOM/cookie of origin B."
+        },
+        {
+          "id": "B",
+          "text": "BLP access control: Subject = user/process; Monitor = OS access-control code; Object = file at level L."
+        },
+        {
+          "id": "C",
+          "text": "TLS handshake: Subject = client; Monitor = handshake verifier; Object = server's identity (cert)."
+        },
+        {
+          "id": "D",
+          "text": "HTTPS encryption-in-transit: Subject = network; Monitor = cipher suite; Object = packet bytes."
+        }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "The reference-monitor pattern requires `(Subject, Monitor, Object) = (active accessor → enforcement-of-policy → passive resource being protected)`. (a), (b), (c) all fit. (d) does *not* — encryption-in-transit isn't *access mediation*, it's a *confidentiality* primitive. \"The network\" isn't a subject *requesting access* to \"packet bytes.\" Mismatching the pattern to encryption is a common trap; the reference monitor is for *enforcement decisions*, not *cryptographic transformations*.",
+      "distractorAnalysis": {
+        "A": "are *correct* mappings the question presents as distractors. The question explicitly asks which pairing is wrong; (d) confuses confidentiality primitive with access mediation.",
+        "B": "are *correct* mappings the question presents as distractors. The question explicitly asks which pairing is wrong; (d) confuses confidentiality primitive with access mediation.",
+        "C": "are *correct* mappings the question presents as distractors. The question explicitly asks which pairing is wrong; (d) confuses confidentiality primitive with access mediation."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L01-Q28",
+      "type": "DIAGRAM",
+      "difficulty": "Trap",
+      "topic": "The TCB Venn shows TCB ⊆ System. A",
+      "stem": "The TCB Venn shows TCB ⊆ System. A vendor's pitch deck shows the *opposite*: System ⊆ TCB (everything is trusted). What is the consequence, and why is this the worst-case design pattern?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The system runs faster."
+        },
+        {
+          "id": "B",
+          "text": "Every component is in the TCB → every bug becomes a security bug → verification burden = entire codebase (intractable); the principled diagnosis is \"no privilege separation, no enforcement boundary, attack surface = whole system.\""
+        },
+        {
+          "id": "C",
+          "text": "The system uses more memory."
+        },
+        {
+          "id": "D",
+          "text": "The vendor saves money on auditing."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCB ⊆ System is the design goal: small, audited core. System ⊆ TCB inverts that: every bug is a security bug because every component is trusted. This is the structural failure of monolithic untrusted-input-handling code. Cannot verify, cannot patch in isolation, cannot reason about what's protected.",
+      "distractorAnalysis": {
+        "A": "Performance/memory irrelevant to the security question.",
+        "D": "**Inverted-economics trap.** The opposite — verification burden *grows* with TCB size.",
+        "C": "Performance/memory irrelevant to the security question."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

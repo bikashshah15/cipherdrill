@@ -1,0 +1,1140 @@
+{
+  "lectureId": "lecture-12-tcp",
+  "lectureTitle": "Transmission Control Protocol (TCP)",
+  "lectureNumber": 12,
+  "topics": [
+    "Byte-stream abstraction (no message boundaries)",
+    "SYN consumes a sequence number",
+    "Two independent sequence-number spaces",
+    "Encapsulation diagram (Slide 6)",
+    "Sequence-number grid (Slide 7)",
+    "3-way handshake diagram (Slide 8)",
+    "Handshake completion → first data packet",
+    "3-way handshake — when state is allocated",
+    "Data-exchange Seq/Ack arithmetic",
+    "Multi-step data-exchange arithmetic (Slide 11)",
+    "Retransmission triggered by missing ACK",
+    "Congestion response to drops",
+    "FIN half-close semantics",
+    "RST vs FIN distinction",
+    "Connection identification — the 5-tuple",
+    "TCP confidentiality and integrity",
+    "TCP checksum and integrity",
+    "Data injection diagram (Slide 16)",
+    "Off-path data injection bottleneck",
+    "Off-path vs on-path attacker capability",
+    "RST injection for censorship",
+    "Hijacking does NOT require a key",
+    "TCP spoofing diagram — race with RST (Slide 17)",
+    "Off-path spoofing walkthrough",
+    "Random ISN as defense",
+    "System-clock ISN historical bug",
+    "TCP segment structure / 32-bit Seq field (Slide 20)",
+    "SYN flood as exploit of state-on-SYN allocation",
+    "TCP+TLS layering — what each layer fixes"
+  ],
+  "questions": [
+    {
+      "id": "L12-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Byte-stream abstraction (no message boundaries)",
+      "stem": "An application calls `send(M1)` once with 1000 bytes, then `send(M2)` once with 1000 bytes. On the receiving side, why is it incorrect to assume that exactly two `recv()` calls of 1000 bytes each will be needed to read all the data?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because TCP guarantees ordering but not delivery, so M2 may arrive before M1."
+        },
+        {
+          "id": "B",
+          "text": "Because TCP exposes data as an undelimited byte stream — the application's message boundaries are erased once the bytes enter the stream."
+        },
+        {
+          "id": "C",
+          "text": "Because TCP's congestion control may discard the second `send()` entirely."
+        },
+        {
+          "id": "D",
+          "text": "Because the receiver's socket buffer is always exactly 500 bytes, halving each message."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP delivers an ordered byte stream, not discrete messages. The receiver may get all 2000 bytes in one `recv()`, or in three calls of 700/700/600 bytes — message framing is the application's job, not TCP's. The slides describe TCP as \"providing a byte stream abstraction\" precisely to set up this point.",
+      "distractorAnalysis": {
+        "A": "Absolutist trap — TCP guarantees both reliability AND in-order delivery; reordering is invisible to the application by design.",
+        "C": "Plausible-sounding but false — congestion slows TCP, never silently drops application data. The application is unaware of congestion.",
+        "D": "Fabricated specific number — buffer sizes vary per system, and they do not chop application data into fixed segments."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "SYN consumes a sequence number",
+      "stem": "The client sends a SYN with Seq=x, and the server's SYN-ACK contains Ack=x+1. The SYN packet carried no application data. Why does the ACK number advance by 1?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the server pads the acknowledgment to round up to the next byte."
+        },
+        {
+          "id": "B",
+          "text": "Because every TCP packet must always increment its ACK counter, regardless of payload."
+        },
+        {
+          "id": "C",
+          "text": "Because the SYN flag itself consumes one position in the sequence-number space, so the next expected byte from the client is x+1."
+        },
+        {
+          "id": "D",
+          "text": "Because x+1 is the start of the server's own sequence space."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "SYN (and FIN) flags consume a slot in the sequence-number space even with no payload. This is what lets the receiver acknowledge the SYN itself and disambiguate retransmits of SYN. It also explains why the client's first data byte after the handshake starts at x+1, not x.",
+      "distractorAnalysis": {
+        "A": "Fabricated mechanism — there is no \"rounding up\" rule.",
+        "B": "Absolutist — packets without the ACK flag don't increment anything; SYN is special precisely because it consumes a slot despite carrying no data.",
+        "D": "Conflates the two sequence spaces — x+1 is in the *client's* space (since the client's ISN was x), not the server's. The server's space starts at y."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Two independent sequence-number spaces",
+      "stem": "A student claims that TCP uses one shared 32-bit sequence-number counter across both directions of a connection, with one side using even numbers and the other using odd numbers. Why is this picture wrong?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because TCP uses two completely independent 32-bit sequence-number spaces — one per direction — each starting at its own random ISN."
+        },
+        {
+          "id": "B",
+          "text": "Because TCP actually uses 64-bit sequence numbers split into two halves."
+        },
+        {
+          "id": "C",
+          "text": "Because both sides must use the same starting sequence number agreed in the handshake."
+        },
+        {
+          "id": "D",
+          "text": "Because sequence numbers are not used for direction tracking; only ports are."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Each direction has its own ISN (x for client→server, y for server→client) and its own counter, advancing independently. They are unrelated 32-bit values — Slide 7 makes this concrete with the \"Hello server\" / \"Hello client\" grids starting at 50 and 25 respectively.",
+      "distractorAnalysis": {
+        "B": "Fabricated — sequence numbers are 32 bits per direction, total. The header diagram on Slide 20 confirms a single 32-bit Sequence Number field.",
+        "C": "Inverts the truth — ISNs are *different* and random per direction, exactly to prevent the predictability the student's even/odd model would create.",
+        "D": "Conflates layers — ports identify the connection endpoint; sequence numbers track byte position within that connection. Both are needed; they don't substitute."
+      },
+      "trapCategories": [
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q04",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Encapsulation diagram (Slide 6)",
+      "stem": "The encapsulation diagram shows nested rectangles: an outer rectangle labeled `IP Header: send to: 1.2.3.4`, a middle rectangle labeled `TCP Header: send to: port 80`, and an inner rectangle with the payload `I am hungry.` What does this nesting illustrate about how the destination port is delivered?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The destination port is duplicated in both the IP and TCP headers for redundancy."
+        },
+        {
+          "id": "B",
+          "text": "The destination port lives in the TCP header, which is itself the payload of the IP packet — so IP routes to 1.2.3.4 first, then the OS uses the TCP header to deliver to port 80."
+        },
+        {
+          "id": "C",
+          "text": "The destination port is delivered before the IP address because the TCP header is innermost."
+        },
+        {
+          "id": "D",
+          "text": "The IP header carries port information when TCP is unavailable."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Encapsulation means TCP sits inside IP. IP routes the packet to the correct host; once the host strips the IP header, the TCP header tells it which port (which application) gets the data. Ports are a TCP concept; IP knows nothing about them.",
+      "distractorAnalysis": {
+        "A": "Fabricated redundancy — ports appear only in the TCP header. Look at the segment diagram on Slide 20: no port field exists in IP.",
+        "C": "Confuses logical nesting with delivery order — outer headers are processed first by routers; the TCP header is opened only at the destination host.",
+        "D": "False — there is no port field in the IP header under any condition."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q05",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Sequence-number grid (Slide 7)",
+      "stem": "The sequence-number diagram shows two grids: `Hello server` indexed 50–61 (client→server) and `Hello client` indexed 25–36 (server→client). A student looks at the grid and concludes that \"the server's ISN is 25 and the client's ISN is 50.\" What is the correct interpretation?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The client's first message starts at sequence number 50 in *the client's* sequence space; the server's first message starts at 25 in *the server's* sequence space. The two numbers are unrelated."
+        },
+        {
+          "id": "B",
+          "text": "The server is acknowledging client byte 50 by starting its own messages at 25."
+        },
+        {
+          "id": "C",
+          "text": "The numbers 25 and 50 are arbitrary; only their difference matters."
+        },
+        {
+          "id": "D",
+          "text": "The server's lower starting number means its data takes priority in delivery."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The two grids depict two independent sequence-number spaces, each with its own random ISN. There is no relationship between 25 and 50 — they're just both random values, exactly the point of the diagram.",
+      "distractorAnalysis": {
+        "B": "Conflates Seq with Ack — server's outgoing Seq is in the server's space; an Ack acknowledging client byte 50 would appear in the *Ack field*, not as the server's Seq.",
+        "C": "Plausible but irrelevant — the difference has no operational meaning. ISNs are independent random draws.",
+        "D": "Fabricated — TCP has no priority mechanism based on sequence-number magnitude."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q06",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "3-way handshake diagram (Slide 8)",
+      "stem": "In the 3-way handshake diagram, after the server sends `SYN-ACK. Seq=y, Ack=x+1`, what does the client's next packet contain?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "`SYN. Seq=y+1`."
+        },
+        {
+          "id": "B",
+          "text": "`ACK. Seq=x+1, Ack=y+1`."
+        },
+        {
+          "id": "C",
+          "text": "`ACK. Seq=y+1, Ack=x+1`."
+        },
+        {
+          "id": "D",
+          "text": "`SYN-ACK. Seq=x, Ack=y`."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The client confirms it received the server's SYN-ACK by sending an ACK with its own next-sequence (x+1, since SYN consumed x) and Ack number y+1 (next expected byte from the server, since SYN-ACK consumed y). This matches the diagram exactly.",
+      "distractorAnalysis": {
+        "A": "Wrong flag and wrong space — the client doesn't send another SYN, and y+1 is in the server's space, not the client's.",
+        "C": "Sequence and Ack values swapped — Seq must come from the *sender's* space (client's = x+1), not the receiver's.",
+        "D": "Wrong flag entirely — SYN-ACK is the server's role; the client never sends it."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q07",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Handshake completion → first data packet",
+      "stem": "After the 3-way handshake completes between client (ISN=x) and server (ISN=y), the client sends 100 bytes of application data in its first data packet. What Seq number does that data packet carry?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "x+1, because the SYN consumed x and the next data byte is x+1."
+        },
+        {
+          "id": "B",
+          "text": "x, because the data packet starts a new sequence count."
+        },
+        {
+          "id": "C",
+          "text": "y+1, because the client must echo the server's last ACK number."
+        },
+        {
+          "id": "D",
+          "text": "x+101, because the client preallocates 100 sequence numbers in advance."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The SYN consumed the value x. The handshake's final ACK from the client carried Seq=x+1 with no data, meaning x+1 is the next data byte. So the first 100 bytes occupy x+1 through x+100; this packet's Seq is x+1.",
+      "distractorAnalysis": {
+        "B": "Confuses connection start with sequence reset — there is no reset; Seq numbers continue from the handshake.",
+        "C": "Wrong space — y+1 is in the server's sequence space; the client's outbound packets must use x-space.",
+        "D": "Inverted arithmetic — the *first* byte is x+1, not x+101 (x+101 would be the next packet *after* sending all 100 bytes)."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q08",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "3-way handshake — when state is allocated",
+      "stem": "Looking at the 3-way handshake diagram, at which step does the server first commit kernel resources to the connection?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "When the server receives the client's final ACK and adds the connection to its established list."
+        },
+        {
+          "id": "B",
+          "text": "When the server receives the client's SYN — it allocates state in order to remember the chosen y and to construct the SYN-ACK reply."
+        },
+        {
+          "id": "C",
+          "text": "When the server receives the first data packet from the client."
+        },
+        {
+          "id": "D",
+          "text": "The server never allocates state until the application calls `accept()`."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The server commits per-connection state when it processes the SYN — it must remember its chosen ISN y and the half-open connection. This early allocation is precisely the foothold a SYN flood exploits: an attacker fires SYNs without ever completing the handshake, exhausting the server's half-open table.",
+      "distractorAnalysis": {
+        "A": "Common student misconception — but if state were only allocated on the final ACK, SYN floods wouldn't be a thing.",
+        "C": "Far too late — the connection must be in the established table before any data arrives, and the data packet would otherwise have no connection to bind to.",
+        "D": "Inverts the layer — `accept()` returns *after* the kernel completes the handshake; the kernel must allocate state first to do that work."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q09",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Data-exchange Seq/Ack arithmetic",
+      "stem": "The client just sent a TCP segment with Seq=x+1, Ack=y+1, Data of length A. The server now wants to reply with its own data of length B. What Seq and Ack values does the server's reply carry?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Seq=y+1, Ack=x+1+A."
+        },
+        {
+          "id": "B",
+          "text": "Seq=x+1+A, Ack=y+1+B."
+        },
+        {
+          "id": "C",
+          "text": "Seq=y, Ack=x+A."
+        },
+        {
+          "id": "D",
+          "text": "Seq=y+1+B, Ack=x+1."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The server's Seq comes from its own y-space and continues from where its last packet left off — y+1, since y was consumed by SYN-ACK and no server data has been sent yet. The Ack acknowledges through the last byte received from the client: client sent bytes x+1 through x+A, so the next expected client byte is x+1+A.",
+      "distractorAnalysis": {
+        "B": "Swaps the spaces entirely — Seq is supposed to be in the *sender's* space (server = y), and Ack indexes the *receiver's* sent bytes.",
+        "C": "Off-by-one in two places (forgets SYN-ACK consumed y; forgets the +1 in Ack to point to \"next expected\").",
+        "D": "Adds B prematurely — the server's Seq advances *after* it sends data of length B; this Seq value would only apply to the *next* server packet."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q10",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Multi-step data-exchange arithmetic (Slide 11)",
+      "stem": "In the data exchange diagram, the sequence runs: client sends `Seq=x+1, Ack=y+1, Data length A`; server replies `Seq=y+1, Ack=x+1+A, Data length B`; client replies `Seq=x+1+A, Ack=y+1+B, Data length C`. What is the server's Ack number in its next reply?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "y+1+B+C."
+        },
+        {
+          "id": "B",
+          "text": "x+1+A+C."
+        },
+        {
+          "id": "C",
+          "text": "x+1+B+C."
+        },
+        {
+          "id": "D",
+          "text": "y+1+C."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Ack numbers index the *other* side's bytes. The server has now received from the client a total of A bytes (in the first segment, starting at x+1) plus C bytes (in the third segment, starting at x+1+A). So the highest received byte is x+A+C, and the next expected client byte is x+1+A+C.",
+      "distractorAnalysis": {
+        "A": "Wrong space — y+1+B+C would be in the *server's own* sent-byte total, not the client's expected-next byte. Ack always indexes the *other* side.",
+        "C": "Mixes B (server's data, which the *client* should be acking) with C (client's data) — wrong direction's bookkeeping.",
+        "D": "Drops the A term entirely — forgets the client's first data segment. A common arithmetic slip under time pressure."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Retransmission triggered by missing ACK",
+      "stem": "A TCP sender transmits a segment, the receiver successfully receives and processes the data, but the receiver's ACK is dropped on its return path. What does the sender do, and why is this behavior correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The sender does nothing because TCP knows the receiver got the data via the next inbound packet."
+        },
+        {
+          "id": "B",
+          "text": "The sender retransmits the segment after a timeout, because from the sender's view \"ACK lost\" is indistinguishable from \"data lost\" — the same fix (resend) safely handles both cases since the receiver silently drops duplicates."
+        },
+        {
+          "id": "C",
+          "text": "The sender immediately tears down the connection with a RST, since the ACK loss indicates corruption."
+        },
+        {
+          "id": "D",
+          "text": "The sender requests an explicit retransmit token from the receiver before resending."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP cannot distinguish \"data lost\" from \"ACK lost\" — both look identical to the sender (no ACK arrives). The same response handles both: retransmit on timeout. The receiver, on seeing the duplicate, silently drops the data and re-sends the ACK, so no harm comes from the duplicate. This is exactly the case described on Slide 12.",
+      "distractorAnalysis": {
+        "A": "Inverts reality — without the ACK, the sender has no proof the data arrived and must assume loss.",
+        "C": "RST is for fatal errors and connection abort, not normal loss recovery. Treating every missing ACK as fatal would make TCP unusable.",
+        "D": "Fabricated — TCP has no such token mechanism. Loss recovery is timeout-driven, not request-driven."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Congestion response to drops",
+      "stem": "When TCP detects packet loss (via missing ACKs), it slows down its sending rate. Why does TCP equate \"missing ACK\" with \"congestion\" rather than with \"random transmission error\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because TCP assumes the underlying network does sufficient bit-error correction at lower layers, so most loss it sees is queue-overflow loss in routers — i.e., congestion."
+        },
+        {
+          "id": "B",
+          "text": "Because the IP header explicitly tags packets as \"lost due to congestion.\""
+        },
+        {
+          "id": "C",
+          "text": "Because TCP retransmissions are slower than the original packets, throttling automatically."
+        },
+        {
+          "id": "D",
+          "text": "Because the receiver explicitly signals congestion via the URG flag."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "In wired networks, link-layer error correction makes random bit errors rare; the dominant cause of drops is router queue overflow under congestion. Treating drops as congestion signals leads TCP to back off, which actually relieves the congestion. (This is a known weakness on wireless links, where loss is often *not* from congestion.)",
+      "distractorAnalysis": {
+        "B": "Fabricated — IP carries no such signal. (ECN exists as a separate, opt-in extension, but standard TCP doesn't rely on it.)",
+        "C": "Conflates mechanism with cause — retransmissions being slow doesn't explain why TCP *interprets* loss as congestion.",
+        "D": "URG is for urgent data delivery, not congestion signaling. Wrong flag entirely."
+      },
+      "trapCategories": [
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "FIN half-close semantics",
+      "stem": "Side A of a TCP connection sends a FIN and receives an ACK. What is true about the connection state after this exchange?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The connection is fully closed in both directions immediately."
+        },
+        {
+          "id": "B",
+          "text": "Side A has stopped sending data but will continue to receive data from Side B until B also sends a FIN — this is called a half-close."
+        },
+        {
+          "id": "C",
+          "text": "Both sides immediately discard all unacknowledged data and forget the connection."
+        },
+        {
+          "id": "D",
+          "text": "Side A's FIN is converted to a RST automatically if no data follows."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "FIN is unidirectional. It says \"I'm done sending; I'll keep listening.\" Side B can keep transmitting and will eventually send its own FIN, which A then ACKs. This four-step graceful close preserves the byte-stream invariant in both directions.",
+      "distractorAnalysis": {
+        "A": "Conflates FIN with RST — only RST closes both directions immediately.",
+        "C": "Inverts the design goal — FIN is graceful precisely so unacknowledged data can finish flowing.",
+        "D": "Fabricated — FIN does not auto-convert to RST. They are distinct flags with distinct semantics."
+      },
+      "trapCategories": [
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q14",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "RST vs FIN distinction",
+      "stem": "A student says: \"RST is just a faster way to do the same thing as FIN — both end the connection, but RST skips the acknowledgments to save round-trips.\" Which of the following is the most precise correction?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The student is correct."
+        },
+        {
+          "id": "B",
+          "text": "RST aborts both directions of the connection unilaterally and is not acknowledged because the state is destroyed; FIN gracefully closes one direction at a time, is acknowledged, and allows in-flight data to finish — so RST and FIN have different semantics, not just different speeds."
+        },
+        {
+          "id": "C",
+          "text": "RST is the same as FIN but is used only by the client side."
+        },
+        {
+          "id": "D",
+          "text": "RST is faster because it sets the SYN flag in addition to a teardown flag, so the connection can be reopened immediately."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "FIN and RST solve different problems. FIN is a controlled half-close that preserves byte-stream integrity. RST is a forceful, bidirectional abort used when something has gone wrong (or when an attacker is hijacking). They are not interchangeable — and that's exactly why RST injection works as an attack while a forged FIN doesn't.",
+      "distractorAnalysis": {
+        "A": "Endorses the misconception — \"faster FIN\" is the exact mental model the question is testing against.",
+        "C": "Fabricated client/server asymmetry — both sides can send RST or FIN. There is no role-restriction on either.",
+        "D": "Combining SYN and RST in one packet is meaningless — they have opposing purposes (open vs abort) and would be invalid."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q15",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Connection identification — the 5-tuple",
+      "stem": "An attacker wants to inject a forged TCP segment into an existing connection so that the receiver accepts it as legitimate. Beyond knowing the sender's current sequence number, what other identifying information must the attacker match?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Just the destination IP — TCP looks up connections by destination only."
+        },
+        {
+          "id": "B",
+          "text": "The 5-tuple: source IP, destination IP, source port, destination port, and protocol — these together name the connection in the receiver's table."
+        },
+        {
+          "id": "C",
+          "text": "The MAC address of the sender, since TCP keys connection lookup by MAC."
+        },
+        {
+          "id": "D",
+          "text": "The TCP checksum of the previous packet."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP indexes connections by the full 5-tuple. A forged segment that doesn't match all five fields will be looked up against a non-existent connection and dropped. (The slides explicitly call out this 5-tuple on Slide 9.)",
+      "distractorAnalysis": {
+        "A": "Far too coarse — many connections share a destination IP simultaneously; without ports there's no disambiguation.",
+        "C": "Wrong layer — MAC is link-layer, not visible to TCP's connection lookup logic.",
+        "D": "Checksums aren't part of connection identity; they're per-packet and only catch accidental corruption."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q16",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "TCP confidentiality and integrity",
+      "stem": "Which of the following does TCP NOT provide?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "In-order, reliable byte delivery between two endpoints."
+        },
+        {
+          "id": "B",
+          "text": "Multiplexing of multiple connections on a single IP via ports."
+        },
+        {
+          "id": "C",
+          "text": "Confidentiality and integrity against an active attacker who can modify or read packets in transit."
+        },
+        {
+          "id": "D",
+          "text": "Retransmission of unacknowledged segments."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "TCP guarantees ordering and reliability against benign network failures (drops, reordering, duplication). It does not authenticate or encrypt — an attacker who can read or modify packets can do exactly that. Confidentiality and integrity are TLS's job, not TCP's. Slide 19 states this verbatim.",
+      "distractorAnalysis": {
+        "A": "TCP does provide this — it's the core guarantee built from sequence numbers and ACKs.",
+        "B": "TCP does provide this via ports (Slide 5).",
+        "D": "Retransmission is the heart of TCP's reliability mechanism."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q17",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "TCP checksum and integrity",
+      "stem": "A student argues that the TCP checksum field protects against tampering, since an attacker who modifies the payload would invalidate the checksum. Why is this argument wrong?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The checksum is only computed for the header, not the data, so payload changes are invisible to it."
+        },
+        {
+          "id": "B",
+          "text": "The checksum is a simple, unkeyed function (one's-complement sum). An attacker who modifies the payload simply recomputes the checksum and inserts it; with no secret key, the checksum cannot detect deliberate tampering — only random bit errors."
+        },
+        {
+          "id": "C",
+          "text": "The checksum is encrypted with the connection's session key, but the session key is sent in plaintext during the handshake."
+        },
+        {
+          "id": "D",
+          "text": "The checksum is verified only at the application layer, after data is delivered."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP's checksum is unkeyed — it's a public function of the packet contents. It catches accidental bit flips (its actual purpose) but provides no integrity against an adversary who can recompute it. This is the canonical \"no secret key → no real integrity\" lesson; a MAC (keyed) is what real integrity requires.",
+      "distractorAnalysis": {
+        "A": "Fabricated — the checksum covers header *and* payload (along with a pseudo-header).",
+        "C": "Fabricated — there is no session key in TCP. This is a confidentiality/integrity confusion.",
+        "D": "Wrong layer and wrong agent — the OS verifies the checksum at the transport layer, not the application."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q18",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Data injection diagram (Slide 16)",
+      "stem": "The TCP data injection diagram shows: (1) client sends `Seq=x+1, Ack=y+1, Data length A`; (2) attacker injects a red dashed packet `Seq=y+1, Evil data, length B`; (3) the real server then sends `Seq=y+1, Ack=x+1+A, Real data, length B`. The callout says \"This packet will be ignored by the client since the client already processed the malicious packet!\" Why is the real server's packet ignored?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the attacker's red dashed packet sets the RST flag, killing the connection before the server's packet arrives."
+        },
+        {
+          "id": "B",
+          "text": "Because both the malicious and real packets carry Seq=y+1 — once the client accepts the malicious packet, its expected next sequence number advances past y+1+B, so the real packet's Seq=y+1 falls into already-acknowledged range and is silently discarded as a duplicate."
+        },
+        {
+          "id": "C",
+          "text": "Because the real server's packet has the wrong destination port."
+        },
+        {
+          "id": "D",
+          "text": "Because TCP refuses to accept any packet whose length matches a previous packet."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP receivers track the next-expected sequence number. After accepting the malicious packet (Seq=y+1, length B), the client's window advances past y+B, so the legitimate later packet at Seq=y+1 looks like a stale duplicate and is silently dropped. The \"first plausible Seq wins\" rule is exactly what makes injection devastating.",
+      "distractorAnalysis": {
+        "A": "The diagram shows no RST — that's a different attack flow (RST injection).",
+        "C": "The legitimate server uses the correct port; nothing is wrong with destination addressing in this scenario.",
+        "D": "Fabricated rule — TCP doesn't dedupe based on length matches. It dedupes by sequence range."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q19",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Off-path data injection bottleneck",
+      "stem": "An off-path (blind) attacker wants to inject malicious data into an established TCP connection. Walking through the attack, which capability is the actual bottleneck for the attacker?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Reading the TCP segment's Source Port from a sniffer."
+        },
+        {
+          "id": "B",
+          "text": "Guessing the receiver's currently expected 32-bit sequence number, since with random ISNs the off-path attacker has roughly a 1-in-2^32 chance per attempt."
+        },
+        {
+          "id": "C",
+          "text": "Cracking the TCP encryption key used by the connection."
+        },
+        {
+          "id": "D",
+          "text": "Forcing the receiver to retransmit by sending a fake RST."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The off-path attacker can spoof IPs and ports (those are guessable from context — well-known server ports, observable client ports), but the 32-bit sequence number is *random* per connection thanks to random ISNs. That's the work factor and the reason blind injection is \"considered difficult\" per Slide 15.",
+      "distractorAnalysis": {
+        "A": "Off-path attackers don't have a sniffer position; that's literally on-path. (And the source port is often well-known anyway for server-bound traffic.)",
+        "C": "There is no TCP encryption key — TCP doesn't encrypt anything. Trap: students conflate TCP with TLS.",
+        "D": "Sending a RST is an entirely different attack (RST injection), not a precursor to data injection. RST kills the connection rather than enabling injection."
+      },
+      "trapCategories": [
+        "conflation",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q20",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Off-path vs on-path attacker capability",
+      "stem": "For TCP data injection, the slides classify off-path attackers as \"difficult\" but on-path attackers as \"easy.\" What is the specific mechanism that produces this gap?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "On-path attackers have access to the sender's private key, which off-path attackers do not."
+        },
+        {
+          "id": "B",
+          "text": "On-path attackers can observe the sequence numbers in transit, so they don't need to guess; off-path attackers cannot observe traffic and must guess a 32-bit value."
+        },
+        {
+          "id": "C",
+          "text": "Off-path attackers can only attack IPv6, while on-path attackers can attack IPv4."
+        },
+        {
+          "id": "D",
+          "text": "On-path attackers can disable the TCP checksum, while off-path attackers cannot."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The single thing standing between an attacker and a successful injection is the 32-bit sequence number. On-path means the attacker sees packets in transit and can read the current sequence number directly. Off-path can't see, so must guess — at 32 bits, that's effectively infeasible per attempt assuming randomness.",
+      "distractorAnalysis": {
+        "A": "There is no private key in TCP. Conflates with public-key cryptography from earlier lectures.",
+        "C": "Fabricated IPv4/IPv6 distinction — has nothing to do with attacker position.",
+        "D": "The checksum is not a security mechanism; \"disabling\" it doesn't change attack feasibility."
+      },
+      "trapCategories": [
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q21",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "RST injection for censorship",
+      "stem": "A government-run firewall uses RST injection to block users in its country from reaching foreign news sites. Walking through the mechanism, why is RST injection well-suited to this kind of censorship?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because a single forged RST packet, with the correct 5-tuple and a sequence number in the receiver's window, immediately tears down the TCP connection — and the firewall's on-path position makes those values trivial to obtain."
+        },
+        {
+          "id": "B",
+          "text": "Because RST packets are encrypted by default, which prevents the user from realizing the connection was killed."
+        },
+        {
+          "id": "C",
+          "text": "Because RST injection requires brute-forcing a private key, which only the firewall operator has."
+        },
+        {
+          "id": "D",
+          "text": "Because RSTs delay connection setup so heavily that users give up."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "A correctly forged RST kills the connection immediately and is not acknowledged (so the attacker doesn't have to maintain state or race a response). The on-path firewall sees all sequence numbers in real time, making forgery trivial. One packet per connection ends the session — high efficiency, low cost. This is exactly the censorship use case named in the slides.",
+      "distractorAnalysis": {
+        "B": "RSTs are not encrypted — this confuses TCP with TLS. TCP has no built-in confidentiality.",
+        "C": "No keys are involved in TCP. Conflates with public-key crypto.",
+        "D": "RST is fast, not slow — speed is the point. RSTs don't delay anything; they abort."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "conflation"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q22",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Hijacking does NOT require a key",
+      "stem": "A student says: \"TCP hijacking is hard because the attacker needs to break the encryption key protecting the connection.\" Identify the misconception in this claim.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The student is correct — TCP uses a 128-bit AES key for confidentiality."
+        },
+        {
+          "id": "B",
+          "text": "There is no encryption key in TCP. Hijacking's difficulty comes solely from learning the current sequence number — easy if on-path, infeasible if off-path. Confidentiality and integrity must be added by a higher layer (TLS)."
+        },
+        {
+          "id": "C",
+          "text": "The student is wrong because TCP uses RSA, not AES, for confidentiality."
+        },
+        {
+          "id": "D",
+          "text": "The student is wrong because hijacking only works on UDP, not TCP."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP has no cryptographic protection at all. Whatever protections a connection has come from above (TLS). The hijacker's bottleneck is the sequence number, not a key — this is the central \"what does TCP NOT provide\" lesson of the lecture.",
+      "distractorAnalysis": {
+        "A": "Endorses the misconception with fabricated specifics. Trap for students who pattern-match \"security = AES.\"",
+        "C": "Same misconception, just with a different fake algorithm. The whole premise that TCP encrypts is wrong.",
+        "D": "Reverses the layer — UDP and TCP are siblings; both can be hijacked, and neither has built-in encryption. Also, this lecture is specifically about TCP attacks."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "fabricated-detail",
+        "pattern-match-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q23",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "TCP spoofing diagram — race with RST (Slide 17)",
+      "stem": "The TCP spoofing diagram shows: a red dashed SYN with forged source, a green SYN-ACK from the server, a red dashed ACK with evil data, then a blue RST from the real client. Two callouts read: \"An on-path attacker must send the evil data before the server receives the real client's RST!\" and \"A MITM attack could just drop the client's packets, however.\" Why does the *real* client send a RST?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because TCP rules require all clients to send a RST every five seconds."
+        },
+        {
+          "id": "B",
+          "text": "Because the real client receives a SYN-ACK from the server it never asked for — its TCP stack interprets this as a stale or hostile packet and aborts the unknown connection with a RST."
+        },
+        {
+          "id": "C",
+          "text": "Because the real client sees the attacker's SYN and responds defensively."
+        },
+        {
+          "id": "D",
+          "text": "Because the server's SYN-ACK contains a malformed flag that triggers a reset."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The forged SYN's source IP = the real client. The server's SYN-ACK therefore goes to the real client. The real client has no record of having sent the SYN, so it treats the SYN-ACK as unsolicited and replies with RST. This is the race the attacker must beat — and why MITM, who can drop the RST, sidesteps the race entirely.",
+      "distractorAnalysis": {
+        "A": "Fabricated periodic-RST behavior — no such rule exists.",
+        "C": "The real client never sees the attacker's SYN — only the server's SYN-ACK reaches them. Geometry of the attack matters here.",
+        "D": "The server's SYN-ACK is well-formed; nothing about it triggers a defensive reset. The reset is from *connection-state mismatch*, not packet malformation."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q24",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Off-path spoofing walkthrough",
+      "stem": "An off-path attacker wants to spoof a TCP connection to a server, masquerading as Alice's IP. Walk through what they must accomplish:",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Send a forged SYN with Alice's IP, then sniff the server's SYN-ACK off the wire to read y, then send the forged ACK."
+        },
+        {
+          "id": "B",
+          "text": "Send a forged SYN with Alice's IP, then guess the server's chosen ISN y (32 bits) to construct a valid forged ACK before Alice's RST cancels the half-open connection."
+        },
+        {
+          "id": "C",
+          "text": "Send a forged SYN, decrypt the server's SYN-ACK using a leaked AES key, then send the forged ACK."
+        },
+        {
+          "id": "D",
+          "text": "Block Alice's network connection, send a forged SYN, then wait indefinitely for the server's SYN-ACK to time out."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Off-path means the attacker cannot see the SYN-ACK going to Alice — the server sends it to Alice's IP, not the attacker's. So they must guess y. With random ISNs, this is a 32-bit guess and effectively infeasible per attempt. Alice's RST race adds a time pressure constraint on top.",
+      "distractorAnalysis": {
+        "A": "Sniffing requires on-path/MITM position — the defining capability the off-path attacker lacks. This describes a different attack class.",
+        "C": "TCP has no AES; SYN-ACK is not encrypted. This swaps in a crypto step that doesn't exist.",
+        "D": "Blocking Alice is a MITM-style capability and changes the attacker's class entirely. Off-path means *no* control over Alice's traffic."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q25",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Random ISN as defense",
+      "stem": "TCP defends against off-path injection and spoofing primarily through random Initial Sequence Numbers (ISNs). Why does randomness specifically defend against the off-path attacker?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the random ISN is encrypted in transit, so the attacker cannot recover it."
+        },
+        {
+          "id": "B",
+          "text": "Because the off-path attacker, lacking visibility into the connection, must guess a 32-bit sequence number per connection — randomness ensures that prior connections' ISNs give no hint about the current one, forcing the attacker to brute-force the full space."
+        },
+        {
+          "id": "C",
+          "text": "Because the random ISN is XORed with each packet, scrambling the data."
+        },
+        {
+          "id": "D",
+          "text": "Because random ISNs slow the handshake, giving the receiver time to detect attacks."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Without observability, the attacker's only option is guessing. Randomness ensures each connection's ISN is independent of past ones — so an attacker can't extrapolate from observed connections to active ones. Bad randomness (e.g., based on system clock) breaks this and makes off-path attacks trivial. Slide 19 names this exact dependence.",
+      "distractorAnalysis": {
+        "A": "ISNs are sent in plaintext during the handshake — no encryption.",
+        "C": "Fabricated XOR of data with ISN — TCP does no such thing.",
+        "D": "Randomness has no impact on handshake speed. This is a fabricated mechanism."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q26",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "System-clock ISN historical bug",
+      "stem": "Early TCP implementations chose the ISN based on the system clock (incrementing by a fixed amount per millisecond). What specific attack does this enable that random ISNs prevent?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Online password cracking against the server."
+        },
+        {
+          "id": "B",
+          "text": "Off-path (blind) injection and spoofing — an attacker with even rough clock synchronization to the server can predict the server's ISN to within a small window, reducing the search from 32 bits to a few hundred guesses, making blind attacks practical."
+        },
+        {
+          "id": "C",
+          "text": "Decryption of the connection's payload."
+        },
+        {
+          "id": "D",
+          "text": "Denial-of-service via SYN flooding."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Predictable ISNs let the off-path attacker compute or narrowly guess the server's chosen y. The defense (random ISNs) directly addresses this — randomness is what restores the 32-bit work factor against blind attackers. Slide 19 explicitly calls out clock-based ISNs as the historical failure.",
+      "distractorAnalysis": {
+        "A": "Wrong layer and wrong attack class — ISN predictability has nothing to do with passwords.",
+        "C": "There is no encryption to decrypt. Conflates TCP with TLS.",
+        "D": "SYN floods don't require ISN prediction at all — they exploit the half-open table allocation, a different mechanism entirely (Q28)."
+      },
+      "trapCategories": [
+        "conflation",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q27",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "TCP segment structure / 32-bit Seq field (Slide 20)",
+      "stem": "The TCP segment structure diagram shows the Sequence Number field as 32 bits wide. Why does this width matter for the security of an established connection against off-path attackers?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because 32 bits is the minimum size needed to address every byte in a 4 GB transfer, regardless of security."
+        },
+        {
+          "id": "B",
+          "text": "Because the 32-bit width is what determines the off-path attacker's work factor — an attacker who must guess the next expected sequence number faces ~2^32 possibilities, which combined with random ISNs makes blind injection infeasible."
+        },
+        {
+          "id": "C",
+          "text": "Because the field is exactly 32 bits to fit on a single x86 register, which is unrelated to security."
+        },
+        {
+          "id": "D",
+          "text": "Because the 32-bit Sequence Number is encrypted with a 32-bit key, providing equivalent confidentiality."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The width directly bounds the difficulty of guessing. Combine 32 bits with random ISNs and you get a security property: ~1-in-4-billion per blind attempt. A smaller field would weaken the defense; that's why the choice of width is also a security choice in practice, not just a byte-counting one.",
+      "distractorAnalysis": {
+        "A": "The byte-addressing reason is real but irrelevant to this question's security framing — it answers \"why 32 bits might be enough for size,\" not \"why it matters for security.\"",
+        "C": "Coincidental — register size has no causal relationship to security choice.",
+        "D": "There is no key; the 32-bit field is not encrypted. Plus, a 32-bit key would be trivially brute-forced — not \"equivalent confidentiality.\""
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q28",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "SYN flood as exploit of state-on-SYN allocation",
+      "stem": "A SYN flood attack sends a flood of TCP SYN packets with spoofed sources, never completing the handshake. Why is this attack possible — that is, what specific design choice in the 3-way handshake does it abuse?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The fact that TCP retransmits SYN packets indefinitely."
+        },
+        {
+          "id": "B",
+          "text": "The fact that the server allocates per-connection state (an entry in its half-open connection table) when it receives the SYN and sends the SYN-ACK — *before* the handshake is complete. A flood fills the half-open table, exhausting server resources and refusing legitimate connections."
+        },
+        {
+          "id": "C",
+          "text": "The fact that random ISNs are computationally expensive to generate, slowing the server."
+        },
+        {
+          "id": "D",
+          "text": "The fact that the TCP checksum is too weak to detect spoofed SYNs."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "State-on-SYN is the design point a SYN flood exploits. If the server delayed allocation until the final ACK (e.g., using SYN cookies, a real-world defense), spoofed SYNs would cost the attacker more than they cost the server. This connects directly to Q8: the server commits state when it sends SYN-ACK, not when it receives the final ACK — and this fact is what makes the flood work.",
+      "distractorAnalysis": {
+        "A": "SYN retransmission isn't unbounded; even if it were, that's not the resource the attack drains. The drained resource is the server's half-open *table*.",
+        "C": "Random ISN generation is fast and isn't the bottleneck. Conflates two unrelated mechanisms.",
+        "D": "The checksum doesn't see whether sources are spoofed; checksum is for accidental corruption only. Wrong layer of defense entirely."
+      },
+      "trapCategories": [
+        "conflation",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L12-Q29",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "TCP+TLS layering — what each layer fixes",
+      "stem": "A user opens an HTTPS connection (TLS over TCP) to a server. An attacker positioned on-path (e.g., a router operator) wants to either read or modify the user's HTTP request. Which property is provided by which layer, and what does the attacker still gain even if HTTPS is in use?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "TCP provides confidentiality and integrity; TLS provides reliability. The attacker gains nothing."
+        },
+        {
+          "id": "B",
+          "text": "TCP provides reliability and ordering only; TLS provides confidentiality and integrity. The attacker can still observe metadata (which IP+port the user contacted, packet timing and sizes) and can still inject RSTs to forcibly terminate the connection — TLS does not protect TCP control packets."
+        },
+        {
+          "id": "C",
+          "text": "TLS provides confidentiality but not integrity, so the attacker can modify the encrypted payload."
+        },
+        {
+          "id": "D",
+          "text": "Once TLS is in use, the underlying TCP layer is bypassed entirely."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "TCP gives reliable in-order bytes; TLS adds confidentiality, integrity, and authenticity on top of those bytes. An on-path attacker still sees IPs, ports, sizes, and timing (TLS doesn't hide these), and can still send forged RSTs since the TCP layer is unprotected — connection killing as censorship works against HTTPS just as it does against HTTP. This is the key takeaway when the lecture says \"TCP provides no confidentiality or integrity — we rely on higher layers.\"",
+      "distractorAnalysis": {
+        "A": "Inverts the layer responsibilities entirely — and the absolutist \"the attacker gains nothing\" is the giveaway trap.",
+        "C": "Mischaracterizes TLS — TLS provides both confidentiality and integrity (and authenticity). Modification of TLS-protected payload would be detected.",
+        "D": "Reverses the layer relationship — TLS rides on top of TCP. TCP packets are still flowing with all the same TCP-layer vulnerabilities (notably RST injection)."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

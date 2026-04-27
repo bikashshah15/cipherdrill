@@ -1,0 +1,966 @@
+{
+  "lectureId": "lecture-13-network-attackers-arp",
+  "lectureTitle": "Network Attackers & ARP",
+  "lectureNumber": 13,
+  "topics": [
+    "Threat model — attacker capabilities",
+    "Attacker capability table (Slide 5)",
+    "ARP protocol guarantees",
+    "Legitimate ARP exchange",
+    "ARP 4-step diagram (Slides 13–16 / 18–21)",
+    "Race condition",
+    "Switch defenses",
+    "ARP spoofing race",
+    "Two-LAN router topology (Slide 11)",
+    "ARP spoofing as capability promotion",
+    "TLS vs ARP",
+    "Promiscuous mode walk-through",
+    "Off-path attacker capabilities",
+    "Fiber-optic tap (Slide 7)",
+    "Gateway impersonation as the worst-case ARP spoof",
+    "Spoofing without same-LAN access",
+    "ARP spoofing — what if a step is broken",
+    "ARP cache state across slides 13–21",
+    "VLANs",
+    "Defense matching",
+    "Broadcast LAN agreement model",
+    "Network protocol stack (Slide 3)",
+    "Spoofed reply mechanics — what does Alice actually cache?",
+    "Multi-defense reasoning",
+    "Absolutist defenses claim"
+  ],
+  "questions": [
+    {
+      "id": "L13-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Threat model — attacker capabilities",
+      "stem": "Why is \"spoofing\" a capability available to all three attacker classes (MITM, on-path, off-path), even though only MITM can modify packets?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because spoofing relies on intercepting and rewriting another machine's packet in transit."
+        },
+        {
+          "id": "B",
+          "text": "Because the source-address field is written by the sender, so any attacker who can transmit a packet can lie about its origin."
+        },
+        {
+          "id": "C",
+          "text": "Because all three attacker classes have the ability to read packets at layer 2."
+        },
+        {
+          "id": "D",
+          "text": "Because spoofing is a layer-3 operation and IP routing automatically validates senders."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Spoofing is a *write* operation on a header field of a packet the attacker is composing themselves. It requires no read access to anyone else's traffic and no ability to modify packets in flight — the attacker simply puts a false value in the source-address field. Because every attacker class can transmit, every class can spoof.",
+      "distractorAnalysis": {
+        "A": "Conflates spoofing with man-in-the-middle interception — that would require modify capability, but spoofing does not.",
+        "C": "Absolutist and false — off-path attackers explicitly cannot read packets, yet they can still spoof.",
+        "D": "False on two counts — spoofing happens at any layer where there's a sender field (including layer 2), and IP has no built-in sender validation. This is the pattern that makes the entire ARP/IP spoofing attack family possible."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q02",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Attacker capability table (Slide 5)",
+      "stem": "The threat-model table classifies attackers by two binary capabilities: can-modify-packets and can-read-packets. Which row is consistent with an off-path attacker?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Can modify ✓, Can read ✓"
+        },
+        {
+          "id": "B",
+          "text": "Can modify ✗, Can read ✓"
+        },
+        {
+          "id": "C",
+          "text": "Can modify ✗, Can read ✗"
+        },
+        {
+          "id": "D",
+          "text": "Can modify ✓, Can read ✗"
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Off-path means neither read nor modify. The attacker is not on the wire; they can only send their own packets and hope they land. They are not powerless — they can spoof — but the table specifically tracks *capabilities on others' packets*, both of which are absent.",
+      "distractorAnalysis": {
+        "A": "That's MITM, not off-path.",
+        "B": "That's on-path.",
+        "D": "Modify-without-read is not a class the professor defines; passive modify isn't physically meaningful — to selectively modify you need to read first."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q03",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "ARP protocol guarantees",
+      "stem": "Which property does the ARP protocol NOT provide?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Translation from layer-3 IP addresses to layer-2 MAC addresses."
+        },
+        {
+          "id": "B",
+          "text": "Caching of resolved bindings to avoid repeated broadcasts."
+        },
+        {
+          "id": "C",
+          "text": "Authentication that the responder is the legitimate owner of the queried IP."
+        },
+        {
+          "id": "D",
+          "text": "A broadcast mechanism for the request on the local LAN."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "ARP has no cryptographic verification step, no shared secret, no certificate. The requester accepts whatever reply arrives first and trusts that the responder is honest. There is nothing in the protocol that lets Alice tell apart Bob's reply from Mallory's. This *absence* is what makes ARP spoofing trivially possible.",
+      "distractorAnalysis": {
+        "A": "False — IP→MAC translation is exactly what ARP does provide; that's the protocol's purpose.",
+        "B": "False — the cache step (step 4) is a defined part of the protocol.",
+        "D": "False — ARP requests are explicitly broadcast on the LAN; that's how all candidates hear the question."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q04",
+      "type": "GAME_WALK",
+      "difficulty": "Foundational",
+      "topic": "Legitimate ARP exchange",
+      "stem": "In the legitimate ARP exchange, at which step does Bob's machine first do anything?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Step 1, when Alice checks her cache."
+        },
+        {
+          "id": "B",
+          "text": "Step 2, when Alice broadcasts the request to the LAN."
+        },
+        {
+          "id": "C",
+          "text": "Step 3, when Bob receives the broadcast and unicasts a reply."
+        },
+        {
+          "id": "D",
+          "text": "Step 4, when Alice updates her cache."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Step 1 happens entirely inside Alice's machine. Step 2 reaches Bob (Bob hears the broadcast at his NIC), but Bob's first *active* response — generating and unicasting the reply — is step 3. Step 4 is Alice's local cache write, with no involvement from Bob. The question is testing the trap of \"Bob receives at step 2\" vs \"Bob acts at step 3.\"",
+      "distractorAnalysis": {
+        "A": "Cache check is local to Alice; Bob is not involved.",
+        "B": "Bob hears the broadcast but only as one of many recipients; he hasn't acted yet.",
+        "D": "This is Alice's local cache update — Bob is not involved."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q05",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "ARP 4-step diagram (Slides 13–16 / 18–21)",
+      "stem": "The professor uses the same 4-step ARP diagram skeleton across **eight slides** — four for the legitimate case, four for the spoofed case. The only structural difference between the two sequences is:",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The legitimate case uses unicast for the request; the spoofed case uses broadcast."
+        },
+        {
+          "id": "B",
+          "text": "In step 3, the responding party is Bob in the legitimate case and Mallory (faster than Bob) in the spoofed case."
+        },
+        {
+          "id": "C",
+          "text": "In step 4, Alice's cache only updates if the response is cryptographically valid."
+        },
+        {
+          "id": "D",
+          "text": "The spoofed case skips step 1 because Mallory injects the request himself."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The whole point of the 8-slide repetition is that the *protocol* is identical — only the *responder* differs, and yet the security outcome is opposite. This isolates the protocol's vulnerability to a single property: lack of authentication on step 3.",
+      "distractorAnalysis": {
+        "A": "False — both cases use broadcast for the request and unicast for the reply.",
+        "C": "False — there is no validation step. That's the whole problem.",
+        "D": "False — step 1 (cache check) is a local action in both cases; Mallory does not need to inject the request."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q06",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Race condition",
+      "stem": "Why is the ARP race condition a *correctness* flaw rather than a *brute-force* or *DoS* vulnerability?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because Mallory must send millions of packets before winning the race."
+        },
+        {
+          "id": "B",
+          "text": "Because a single well-timed reply from Mallory is enough to poison the cache; no probabilistic flooding is required."
+        },
+        {
+          "id": "C",
+          "text": "Because the race condition only matters when the network is heavily loaded."
+        },
+        {
+          "id": "D",
+          "text": "Because ARP requests use a checksum that an attacker has to brute-force."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A race condition is a flaw where the *first valid-looking reply* wins. Mallory does not need to outvolume Bob; she just needs to outpace Bob *for one packet*. That's a correctness problem in the protocol, not an exhaustion problem on Bob.",
+      "distractorAnalysis": {
+        "A": "Confuses race condition with brute-force; the attack is one packet, not many.",
+        "C": "Plausible but wrong — load doesn't change the race, only the relative latencies. The protocol is broken even on an unloaded network.",
+        "D": "False — ARP packets are not protected by a cryptographic checksum."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q07",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Switch defenses",
+      "stem": "A standard (non-enterprise) layer-2 switch is deployed on a LAN. Which capability does the plain switch NOT provide that would actually mitigate ARP spoofing?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Forwarding frames only to the port matching the destination MAC."
+        },
+        {
+          "id": "B",
+          "text": "Maintaining a MAC-to-port forwarding table."
+        },
+        {
+          "id": "C",
+          "text": "Validating that ARP responses come from the legitimate owner of the claimed IP."
+        },
+        {
+          "id": "D",
+          "text": "Reducing broadcast traffic seen by hosts that are not the destination of a unicast frame."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Plain switches reduce the *visibility* surface (no more all-machines-see-all-frames) but they do not authenticate ARP responses. The defense that authenticates ARP responses is **Dynamic ARP Inspection (DAI)**, an enterprise-only feature. A plain switch happily forwards Mallory's spoofed reply to Alice's port.",
+      "distractorAnalysis": {
+        "A": "False — this is exactly what plain switches do.",
+        "B": "False — the MAC/port table is the switch's basic data structure.",
+        "D": "False — switches reduce broadcast leakage compared to hubs; that's their whole reason for existing."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q08",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "ARP spoofing race",
+      "stem": "In the spoofed ARP exchange (Slide 20), what specifically happens \"before Bob's response can arrive\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Mallory's network card filters out Bob's reply."
+        },
+        {
+          "id": "B",
+          "text": "Mallory sends a forged unicast reply claiming Bob's IP maps to Mallory's MAC, which arrives at Alice's machine before Bob's legitimate reply."
+        },
+        {
+          "id": "C",
+          "text": "Mallory broadcasts a request impersonating Alice to suppress Bob."
+        },
+        {
+          "id": "D",
+          "text": "Mallory injects an IP packet at the gateway router to drop Bob's reply."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The spoofing attack is: Mallory hears Alice's broadcast, instantly crafts a unicast reply to Alice with the binding `(1.2.3.4 → Mallory's MAC)`, and that reply is delivered before Bob's. The race is purely about latency to Alice — no suppression of Bob is required.",
+      "distractorAnalysis": {
+        "A": "Mallory's NIC has no power to filter packets at Alice's NIC. Wrong endpoint.",
+        "C": "Impersonating Alice doesn't suppress Bob; that would be a different attack and isn't what the slide describes.",
+        "D": "A gateway-level packet drop is not what the slide is showing — and ARP traffic is local to the LAN, the router is not in the path."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q09",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Two-LAN router topology (Slide 11)",
+      "stem": "Alice is on LAN 1 (with the router and machines A–D); Bob is on LAN 2 (with machines E–H, separated by the router). Alice wants to send a packet to Bob's IP. What is the destination MAC of the *first* frame leaving Alice's machine, and what is the destination IP of that packet?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Destination MAC = Bob's MAC; Destination IP = Bob's IP."
+        },
+        {
+          "id": "B",
+          "text": "Destination MAC = router's MAC; Destination IP = router's IP."
+        },
+        {
+          "id": "C",
+          "text": "Destination MAC = router's MAC; Destination IP = Bob's IP."
+        },
+        {
+          "id": "D",
+          "text": "Destination MAC = broadcast; Destination IP = Bob's IP."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Layer-2 destination is hop-by-hop; layer-3 destination is end-to-end. Because Bob is on a different LAN, Alice cannot ARP Bob — she ARPs the gateway router. The frame leaves Alice with the router's MAC at layer 2 but Bob's IP at layer 3. The router decapsulates, looks up its routing table, ARPs the next hop, and re-encapsulates with a new layer-2 destination.",
+      "distractorAnalysis": {
+        "A": "Alice cannot ARP Bob's MAC; Bob is off the LAN, so ARP requests don't reach him. This is the canonical layer confusion.",
+        "B": "Wrong layer-3 — the router is a forwarding hop, not the destination. Putting the router's IP at layer 3 would cause the router to terminate the packet rather than forward it.",
+        "D": "Broadcast at layer 2 would flood the LAN, not forward toward Bob. Wrong mechanism."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "ARP spoofing as capability promotion",
+      "stem": "Why does ARP spoofing functionally promote a same-LAN attacker from off-path or on-path to full MITM?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the spoof modifies the kernel's network stack on the victim's machine."
+        },
+        {
+          "id": "B",
+          "text": "Because once Alice caches Mallory's MAC under Bob's IP, all of Alice's frames intended for Bob are physically delivered to Mallory, who can then read, modify, drop, or forward them."
+        },
+        {
+          "id": "C",
+          "text": "Because spoofing replaces the encryption key on the victim's traffic."
+        },
+        {
+          "id": "D",
+          "text": "Because ARP responses include privileged kernel commands that the attacker can execute on Alice's machine."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Capability promotion is about *getting traffic to flow through you*. Once the cache is poisoned, layer-2 routing physically redirects Alice→Bob frames to Mallory's NIC. Mallory now has read AND modify capability on every such frame — which is the definition of MITM. No kernel exploit, no cryptographic break, just rerouting at layer 2.",
+      "distractorAnalysis": {
+        "A": "False — no kernel modification; Alice's stack works correctly with the (poisoned) cache entry.",
+        "C": "False — there's no encryption key in ARP. The attack happens entirely at layer 2.",
+        "D": "False — ARP responses are pure address mappings; they cannot execute code."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q11",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "TLS vs ARP",
+      "stem": "A student claims, \"TLS prevents ARP spoofing because TLS encrypts everything.\" Which response best identifies the error?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Correct — TLS authenticates ARP responses via certificate validation."
+        },
+        {
+          "id": "B",
+          "text": "Wrong — TLS sits at layer 4.5; ARP runs at layer 2, so TLS never touches ARP traffic. ARP spoofing succeeds and Mallory becomes MITM; TLS only ensures the encrypted application payload still cannot be decrypted, but Mallory can still tamper with TCP, drop packets, and downgrade."
+        },
+        {
+          "id": "C",
+          "text": "Wrong — TLS prevents ARP spoofing only when the LAN uses HTTPS exclusively."
+        },
+        {
+          "id": "D",
+          "text": "Correct — once TLS is established, ARP responses are signed."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The trap is the absolutist phrase \"TLS encrypts everything.\" TLS protects *application payloads above layer 4*. ARP is layer 2 and runs in clear plaintext; TLS has no view of it. A successful ARP spoof gives Mallory MITM at layer 2, where she sees encrypted application bytes but also sees layer-3/4 headers and can drop, reorder, or interfere with the TCP connection. TLS prevents *decryption* — not the MITM position itself.",
+      "distractorAnalysis": {
+        "A": "Absolutist + factually false — TLS does not authenticate ARP at all.",
+        "C": "Doesn't address the layer mismatch and is mechanistically wrong.",
+        "D": "TLS does not sign ARP. Wrong layer, wrong mechanism."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q12",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Promiscuous mode walk-through",
+      "stem": "Machines A, B, C, D are on a broadcast LAN. A sends a frame to B with destination MAC = B's MAC. Which sequence correctly explains why C does not see the frame's payload by default and what changes if C enables promiscuous mode?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "C's NIC physically does not receive the frame because the bits are routed only to B; promiscuous mode causes the bits to be re-routed to C as well."
+        },
+        {
+          "id": "B",
+          "text": "C's NIC receives the frame's bits but the kernel filters it out because destination MAC ≠ C's MAC; promiscuous mode tells the NIC/kernel to deliver all received frames regardless of destination MAC, requiring root privileges."
+        },
+        {
+          "id": "C",
+          "text": "C's NIC receives the frame and the kernel decrypts it; promiscuous mode skips the decryption step."
+        },
+        {
+          "id": "D",
+          "text": "C cannot read the frame because it is encrypted at layer 2 by default; promiscuous mode disables that encryption."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "On a broadcast LAN the bits *are* received by every NIC physically. The kernel-level destination-MAC filter is what hides them from C. Promiscuous mode disables that filter, requiring root because reading raw frames bypasses the OS's normal access boundary.",
+      "distractorAnalysis": {
+        "A": "False — broadcast LANs really do send the bits to everyone; the filter is at the kernel, not the wire.",
+        "C": "Layer 2 has no decryption step by default; the answer invents a mechanism that doesn't exist.",
+        "D": "Same fabrication — there is no default layer-2 encryption on Ethernet."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q13",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Advanced",
+      "topic": "Off-path attacker capabilities",
+      "stem": "Which of the following is NOT a capability of an off-path attacker?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Spoofing the source IP of a packet they generate."
+        },
+        {
+          "id": "B",
+          "text": "Sending forged TCP RST packets to a connection (blind injection)."
+        },
+        {
+          "id": "C",
+          "text": "Reading the contents of a TLS-protected packet they observe in transit."
+        },
+        {
+          "id": "D",
+          "text": "Exploiting a race condition in a remote protocol if they can transmit fast enough."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Off-path attackers cannot read packets at all. The \"in transit\" framing is the trap — they're not on the path, so they don't observe transit. Option C is doubly wrong because even if they could observe, TLS-protected payloads are encrypted, but they can't observe in the first place.",
+      "distractorAnalysis": {
+        "A": "Off-path can absolutely spoof — that's the universal primitive.",
+        "B": "Blind RST injection is a classic off-path attack; the attacker guesses sequence numbers and shouts.",
+        "D": "Off-path can race remotely if their transmissions reach the target faster than the legitimate response."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q14",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Fiber-optic tap (Slide 7)",
+      "stem": "The fiber-optic tap diagram shows a micro-bend clamp diverting <1% of light to a photodetector. Why does the professor use this specific number?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "To show that fiber-optic taps work by overwhelming the receiver with extra light."
+        },
+        {
+          "id": "B",
+          "text": "To emphasize that the loss is below typical link-monitoring noise floors, making the tap nearly undetectable in operation."
+        },
+        {
+          "id": "C",
+          "text": "To prove that fiber tapping requires more than 99% of the original signal, which is impossible."
+        },
+        {
+          "id": "D",
+          "text": "To show that promiscuous mode requires <1% CPU overhead."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The pedagogical point of the diagram is that on-path layer-1 attacks are *real* and *covert*. The <1% number is the key to covertness — it's small enough to look like normal optical loss/noise rather than a tap. The diagram is anchoring the concept that \"on-path attacker\" is not theoretical.",
+      "distractorAnalysis": {
+        "A": "Backwards — the tap *removes* light, not adds it.",
+        "C": "Misreads the figure; <1% is the diverted fraction, not a barrier.",
+        "D": "Conflates two unrelated diagrams (fiber tap and promiscuous mode)."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q15",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Gateway impersonation as the worst-case ARP spoof",
+      "stem": "Why is ARP-spoofing the gateway router's IP particularly damaging compared to ARP-spoofing a single host's IP?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The gateway uses a different ARP variant that has no defenses."
+        },
+        {
+          "id": "B",
+          "text": "Spoofing the gateway redirects all of Alice's off-LAN traffic through Mallory, since every off-subnet packet is layer-2-addressed to the gateway's MAC; spoofing one host only hijacks Alice→that-host traffic."
+        },
+        {
+          "id": "C",
+          "text": "The gateway's MAC is hardcoded into the kernel and cannot be changed, so a spoof crashes the kernel."
+        },
+        {
+          "id": "D",
+          "text": "The gateway's ARP cache is shared across all routers on the internet, so the poison propagates globally."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The blast radius scales with how much traffic targets the spoofed IP. Spoofing one host hijacks only flows to that host. Spoofing the gateway hijacks *every off-LAN destination* — i.e., effectively all of Alice's internet traffic — because the layer-2 destination of every off-subnet packet is the gateway's MAC.",
+      "distractorAnalysis": {
+        "A": "False — ARP is one protocol; no separate \"gateway ARP.\"",
+        "C": "Fabricated mechanism; no such hardcoding.",
+        "D": "False — ARP caches are local to each machine; there is no global propagation."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q16",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Spoofing without same-LAN access",
+      "stem": "A student says, \"Mallory can ARP-spoof Alice from anywhere on the internet because spoofing only requires writing a fake source address.\" Which response correctly identifies the flaw?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Correct — IP spoofing and ARP spoofing are equivalent."
+        },
+        {
+          "id": "B",
+          "text": "Wrong — ARP requests are layer-2 broadcasts confined to the LAN; routers do not forward them. Mallory must be on the same LAN as Alice to even see the request, let alone reply faster than Bob."
+        },
+        {
+          "id": "C",
+          "text": "Wrong — ARP responses are signed by the requesting machine."
+        },
+        {
+          "id": "D",
+          "text": "Correct — ARP works over the internet via DNS lookups."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The student is overgeneralizing \"spoofing is universal\" to \"spoofing on any layer is reachable from anywhere.\" It is not — layer-2 broadcasts don't traverse routers, so ARP attacks are intrinsically same-LAN. This is the precise scope claim the professor reinforces in the defenses slide.",
+      "distractorAnalysis": {
+        "A": "False — IP spoofing crosses the internet, ARP spoofing does not.",
+        "C": "False — ARP has no signatures.",
+        "D": "False — ARP and DNS are different protocols at different layers; no DNS traversal of ARP exists."
+      },
+      "trapCategories": [
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q17",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "ARP spoofing — what if a step is broken",
+      "stem": "In the ARP-spoofing race, suppose Mallory loses the race in step 3 (Bob's reply arrives at Alice first). What attack technique still allows Mallory to poison Alice's cache afterwards?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Mallory cannot poison the cache because the protocol locks bindings after the first reply."
+        },
+        {
+          "id": "B",
+          "text": "Mallory continues to send unsolicited (gratuitous) ARP replies; many implementations accept and overwrite cache entries on receipt of an unrequested reply."
+        },
+        {
+          "id": "C",
+          "text": "Mallory must wait for Alice's NIC to enter promiscuous mode."
+        },
+        {
+          "id": "D",
+          "text": "Mallory has to physically disconnect Bob from the LAN."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "ARP is stateless on the requester side — there's no \"I'm only expecting one reply, ignore the rest\" enforcement in many implementations. Gratuitous ARP (an unsolicited reply) is accepted and silently overwrites the cache. Mallory wins by persistence even after losing the initial race.",
+      "distractorAnalysis": {
+        "A": "Absolutist and false — ARP has no lock-out.",
+        "C": "Promiscuous mode is unrelated to cache acceptance behavior.",
+        "D": "Disconnection is a denial-of-service, not a poisoning technique; the attack works without it."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q18",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "ARP cache state across slides 13–21",
+      "stem": "Across slides 13–21 the professor shows Alice's cache repeatedly. Why does the cache start empty in both the legitimate and the attack diagrams?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because ARP caches are wiped every time the machine boots and the diagrams represent fresh boots."
+        },
+        {
+          "id": "B",
+          "text": "Because the empty cache is the *trigger condition* for an ARP request — if the binding were already cached, no broadcast would occur and there would be no opportunity to spoof. The professor uses the empty-cache state to motivate why the request happens at all."
+        },
+        {
+          "id": "C",
+          "text": "Because ARP caches are encrypted and the diagram shows the encrypted state as empty."
+        },
+        {
+          "id": "D",
+          "text": "Because ARP forbids caching of any binding that has been used in a prior session."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The empty cache is a precondition. If the binding were cached, Alice would skip steps 2–3 entirely and use the cached MAC. The whole vulnerability surface (broadcast + accept-first-reply) only opens when the cache is empty. The professor draws it empty in slide 13 and slide 18 to show that *both* the legitimate and the attack path go through the same trigger.",
+      "distractorAnalysis": {
+        "A": "Plausible but pedagogically weak — caches do persist; the empty state is not boot-specific. Misses the conceptual point.",
+        "C": "False — ARP caches are not encrypted.",
+        "D": "False — ARP explicitly caches bindings; that's the whole point of step 4."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q19",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "VLANs",
+      "stem": "Why does deploying VLANs reduce — but not eliminate — the threat of ARP spoofing?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "VLANs encrypt ARP traffic so spoofed replies are rejected."
+        },
+        {
+          "id": "B",
+          "text": "VLANs partition a single physical LAN into isolated broadcast domains, so an attacker on VLAN A cannot ARP-spoof a victim on VLAN B; however, attackers and victims on the *same* VLAN remain fully exposed."
+        },
+        {
+          "id": "C",
+          "text": "VLANs require all hosts to authenticate with certificates before joining."
+        },
+        {
+          "id": "D",
+          "text": "VLANs replace ARP with a centralized address-resolution server."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A VLAN is a logical LAN partition. ARP broadcasts are confined to a single VLAN, so cross-VLAN attacks need an additional capability (e.g., VLAN hopping). But intra-VLAN, ARP is still the same unauthenticated protocol — Mallory and Alice on the same VLAN gives Mallory full ARP-spoofing capability.",
+      "distractorAnalysis": {
+        "A": "False — VLANs do not encrypt or authenticate ARP; they segment broadcast domains.",
+        "C": "False — VLAN membership is typically configured by port or by tag, not by certificate.",
+        "D": "False — VLANs do not replace ARP; ARP runs identically inside each VLAN."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q20",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Defense matching",
+      "stem": "Match each ARP-spoofing defense to the attack step it primarily disrupts: (1) static ARP entries, (2) Dynamic ARP Inspection (DAI), (3) arpwatch.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "(1) blocks step 2; (2) blocks step 4; (3) blocks step 1."
+        },
+        {
+          "id": "B",
+          "text": "(1) blocks step 4 (the cache update — entries cannot be overwritten); (2) blocks step 3 (the response — unauthorized replies are dropped at the switch); (3) is detective — it observes step 3/4 and alerts on suspicious binding changes but does not block."
+        },
+        {
+          "id": "C",
+          "text": "(1) blocks step 1; (2) blocks step 2; (3) blocks step 3."
+        },
+        {
+          "id": "D",
+          "text": "(1) blocks step 3; (2) blocks step 1; (3) blocks step 2."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "- Static ARP entries are pre-populated bindings that cannot be dynamically overwritten — they freeze step 4.\n- DAI runs at the switch and validates ARP responses against a trusted IP/MAC table — it drops Mallory's reply at step 3.\n- arpwatch is a passive monitor — it doesn't *prevent* anything, it logs and alerts. This is detective control, not preventive.",
+      "distractorAnalysis": {
+        "A": "Random pairings; static ARP doesn't block step 2 (the broadcast still goes out).",
+        "C": "Wrong — none of these defenses blocks step 1 (the local cache check) since it's a host-internal action.",
+        "D": "Wrong — DAI does not block step 1 (cache check), it intercepts step 3 replies at the switch."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q21",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Broadcast LAN agreement model",
+      "stem": "Why does the professor describe broadcast LANs as relying on a \"polite agreement\" rather than true confidentiality?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because broadcast frames are encrypted and the receivers agree on the key."
+        },
+        {
+          "id": "B",
+          "text": "Because every machine physically receives the frame; only the kernel's destination-MAC filter prevents non-recipients from reading it. The filter is convention enforced by software, not enforcement by the medium — anyone with root can opt out."
+        },
+        {
+          "id": "C",
+          "text": "Because the LAN's policy document requires honesty."
+        },
+        {
+          "id": "D",
+          "text": "Because the broadcast is signed by the sender's private key."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The medium itself does not provide confidentiality. The privacy guarantee on a broadcast LAN reduces to \"everyone agrees to ignore frames not for them.\" That's a software convention, breakable with promiscuous mode. The professor uses \"agreement\" to highlight that there is no cryptographic or physical separation.",
+      "distractorAnalysis": {
+        "A": "Default Ethernet has no encryption.",
+        "C": "Anthropomorphizes; LANs have no \"policy document.\"",
+        "D": "Frames are not signed."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q22",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Network protocol stack (Slide 3)",
+      "stem": "In the protocol-stack table, TLS is placed at \"layer 4.5\" rather than at layer 4 or layer 7. Why is this layer placement *itself* the punchline of an attack-classification question?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because TLS is faster than TCP and slower than HTTP."
+        },
+        {
+          "id": "B",
+          "text": "Because TLS sits above TCP (layer 4) and below the application (layer 7), it inherits TCP's connection from below and protects application payloads from above. Attacks at layers 1–4 (e.g., ARP, IP spoofing, TCP RST) operate *below* TLS and are not prevented by it; only layer-7 application data is encrypted/authenticated end-to-end."
+        },
+        {
+          "id": "C",
+          "text": "Because layer 4.5 is a placeholder used when the textbook ran out of layers."
+        },
+        {
+          "id": "D",
+          "text": "Because TLS encrypts the IP header."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The \"4.5\" placement is precisely the classification punchline — TLS only protects what's *above* it. Anything below (ARP, IP, TCP) is in the clear and exposed to layer-2/3/4 attackers. This explains why a successful ARP spoof still gives Mallory MITM even on TLS-protected sessions: the attack is at layer 2, beneath TLS's coverage.",
+      "distractorAnalysis": {
+        "A": "Speed comparisons are unrelated to the layer assignment.",
+        "C": "Sarcastic and false — layer 4.5 expresses TLS's actual position relative to TCP and the application.",
+        "D": "False — TLS encrypts payloads from layer 7; the IP header is in the clear."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q23",
+      "type": "GAME_WALK",
+      "difficulty": "Trap",
+      "topic": "Spoofed reply mechanics — what does Alice actually cache?",
+      "stem": "In Slide 21, Mallory's spoofed reply produces what cache entry on Alice, and what is the immediate consequence?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Cache entry: (Bob's IP, Bob's MAC). Consequence: Alice sends frames to Bob normally; Mallory sees nothing."
+        },
+        {
+          "id": "B",
+          "text": "Cache entry: (Mallory's IP, Mallory's MAC). Consequence: Alice's traffic to Bob is unaffected because the binding is for Mallory's own IP."
+        },
+        {
+          "id": "C",
+          "text": "Cache entry: (Bob's IP, Mallory's MAC). Consequence: Alice's frames intended for Bob's IP at layer 2 are delivered to Mallory's NIC, who can read, modify, drop, or forward."
+        },
+        {
+          "id": "D",
+          "text": "Cache entry: (Mallory's IP, Bob's MAC). Consequence: Alice's traffic to Mallory is delivered to Bob."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "The whole point of ARP spoofing is to bind the *victim's IP* to the *attacker's MAC*. Alice resolves \"1.2.3.4\" (Bob's IP) and gets back Mallory's MAC. Now layer-2 delivery for any Alice→Bob frame goes physically to Mallory's network card. This is the MITM-promotion step.",
+      "distractorAnalysis": {
+        "A": "Describes the legitimate exchange, not the attack.",
+        "B": "The trap of binding Mallory's own IP is mechanically wrong — Alice queried Bob's IP, so the cache key is Bob's IP.",
+        "D": "Reverses the binding direction. Cache key is the IP queried, not the IP claimed by the responder. And Mallory wants traffic redirected *to her*, not away."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "Multi-defense reasoning",
+      "stem": "A network admin enables HTTPS-everywhere on the corporate LAN. A security consultant says, \"ARP spoofing is still a serious risk.\" Which composite reasoning best supports the consultant?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "HTTPS uses certificates, but ARP spoofing causes the browser to bypass certificate validation."
+        },
+        {
+          "id": "B",
+          "text": "Because ARP operates at layer 2 below HTTPS (TLS at 4.5), a successful ARP spoof gives Mallory MITM at layer 2 regardless of HTTPS. Mallory cannot decrypt HTTPS, but she can drop, reorder, and tamper with TCP segments, perform downgrade attempts, and observe metadata (SNI, packet sizes, timing); furthermore, non-HTTPS protocols on the LAN (DHCP, ARP itself, internal HTTP, mDNS) remain fully exposed."
+        },
+        {
+          "id": "C",
+          "text": "HTTPS only encrypts GET requests, not POST requests, so ARP spoofing exposes form data."
+        },
+        {
+          "id": "D",
+          "text": "ARP spoofing breaks the HTTPS handshake by interfering with the TCP three-way handshake's sequence numbers."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the synthesis question — three threads converge: layer separation (TLS at 4.5 vs ARP at 2), capability promotion (ARP spoof → MITM), and *coverage gap* (HTTPS protects only HTTPS; everything else on the LAN is naked). Even with perfect HTTPS, the LAN still carries ARP, DHCP, mDNS, internal-only HTTP services, and TLS metadata — all exposed once Mallory is MITM.",
+      "distractorAnalysis": {
+        "A": "Plausible-sounding fabrication — ARP spoofing does not affect certificate validation.",
+        "C": "False — HTTPS encrypts all HTTP methods symmetrically. Method-specific encryption is a misconception.",
+        "D": "A specific mechanism that's not generally true; HTTPS works fine on a poisoned ARP cache (TCP just routes through Mallory transparently). Confuses ARP spoofing with TCP RST injection."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L13-Q25",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Absolutist defenses claim",
+      "stem": "A networking textbook claims: \"Modern enterprise switches with DAI completely eliminate ARP spoofing as a threat.\" Which response correctly identifies the flaw and the more accurate framing?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Correct — DAI is mathematically proven to be unbreakable."
+        },
+        {
+          "id": "B",
+          "text": "Wrong (absolutist language) — DAI blocks unauthorized ARP responses *if the IP/MAC trust table is correct and complete and the DHCP snooping it relies on isn't poisoned*. DAI also doesn't help on networks where the switch lacks the feature, on VLANs where DAI is misconfigured, or against insider attackers who can modify the trusted table. The accurate framing is: DAI raises the bar significantly but is one defense in a defense-in-depth stack, not a complete elimination."
+        },
+        {
+          "id": "C",
+          "text": "Correct — once DAI is enabled, no other defenses are needed."
+        },
+        {
+          "id": "D",
+          "text": "Wrong — DAI does not work because ARP is broadcast and broadcasts cannot be inspected."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The absolutist claim (\"completely eliminate\") is the trap. Real-world DAI relies on a trusted IP/MAC table built from DHCP snooping, on correct VLAN configuration, on the operator's threat model excluding insider table tampering, and on every switch in the network supporting it. None of these is automatic. The mechanism is a strong layer of defense, not a complete elimination.",
+      "distractorAnalysis": {
+        "A": "Absolutist + false — DAI is not a mathematical proof, it's an engineering control.",
+        "C": "Absolutist — defense in depth is the standard recommendation.",
+        "D": "False — DAI absolutely can inspect broadcast ARP traffic; switches see all ARP frames."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

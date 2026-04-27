@@ -1,0 +1,1100 @@
+{
+  "lectureId": "lecture-10-xss-and-ui-attacks",
+  "lectureTitle": "XSS and UI Attacks",
+  "lectureNumber": 10,
+  "topics": [
+    "XSS — origin attribution",
+    "XSS — root cause",
+    "Go handler trace — slides 6–9",
+    "Stored XSS attack sequence — slide 12",
+    "Reflected XSS attack sequence — slide 14",
+    "Reflected XSS vs CSRF",
+    "Stored XSS attack chain",
+    "Reflected XSS attack chain",
+    "HTML sanitization",
+    "Sanitization at output, not input",
+    "Content Security Policy",
+    "Defense composition — sanitization + CSP",
+    "Sanitized handler — slide 18",
+    "XSS payloads beyond `<script>`",
+    "Misdiagnosed XSS defenses",
+    "Why the browser trusts user clicks",
+    "Invisible iframe variants — slide 24",
+    "Temporal clickjacking — slides 25–26",
+    "Cursorjacking — slide 27",
+    "Frame-busting (X-Frame-Options / CSP frame-ancestors)",
+    "Phishing URL checks",
+    "Homograph attack mechanism",
+    "Browser-in-browser attack",
+    "2FA factor classification",
+    "Relay attack — slide 43",
+    "What 2FA does NOT defend against",
+    "Hardware key vs SMS — origin binding",
+    "XSS + cookie attributes — the after-HttpOnly attack"
+  ],
+  "questions": [
+    {
+      "id": "L10-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "XSS — origin attribution",
+      "stem": "Why does an attacker's JavaScript injected via XSS execute under the *legitimate* site's origin rather than the attacker's origin?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the attacker spoofs the HTTP `Origin` header in the response."
+        },
+        {
+          "id": "B",
+          "text": "Because the browser assigns origin based on where the page was *delivered from*, not what the page contains."
+        },
+        {
+          "id": "C",
+          "text": "Because the same-origin policy automatically promotes any inline script to the page's domain."
+        },
+        {
+          "id": "D",
+          "text": "Because JavaScript inherits the origin of whichever server signed the page's TLS certificate."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The browser tags every script with the origin of the document that contained it, and that document's origin is determined by the URL the browser fetched it from. The legitimate server is the entity that put the malicious bytes into its own HTTP response, so from the browser's perspective those bytes are part of `legit.com`'s page — origin = `legit.com`. This is why XSS is so devastating: the attacker doesn't break SOP from the outside, he gets the legitimate site to *vouch* for his code from the inside.",
+      "distractorAnalysis": {
+        "A": "Plausible misconception — students think XSS is about header spoofing. The attacker never touches the response headers; the legitimate server emits them. Origin is not header-controlled by inline content.",
+        "C": "Absolutist-language distractor — \"automatically promotes\" sounds protocol-like but no such mechanism exists. Origin is set at fetch time, full stop.",
+        "D": "Conflates TLS identity with origin labeling. The cert proves *who served* the bytes; that's exactly the point — the legitimate server served them, so the legitimate origin owns them. The cert doesn't grant origin; it confirms it."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "XSS — root cause",
+      "stem": "The lecture frames the entire XSS problem as \"websites use untrusted content as control data.\" What does this phrase mechanistically mean?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The website fails to encrypt user input in transit, so the attacker can modify it."
+        },
+        {
+          "id": "B",
+          "text": "The website inserts user-supplied bytes into a position where the HTML parser interprets them as markup or script rather than as text."
+        },
+        {
+          "id": "C",
+          "text": "The website executes user input on the server before sending the response."
+        },
+        {
+          "id": "D",
+          "text": "The website grants the user write access to the server's database without authentication."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "\"Control data\" here means data that controls how the page is parsed — tags, attributes, script bodies. The mechanism: bytes that should have lived inside a *data context* (the visible body of the page) end up in a *control context* where the HTML/JS parser treats them as syntax. `<script>alert(1)</script>` is just text — until a parser sees it in a markup position.",
+      "distractorAnalysis": {
+        "A": "Confidentiality/integrity flip — TLS prevents eavesdropping, not parser confusion. The attacker doesn't need to modify anything in transit; he supplied the malicious input through legitimate channels.",
+        "C": "Conflates XSS with server-side code injection (CWE-94, a different bug). XSS executes in the *browser*, not the server.",
+        "D": "Conflates XSS with broken access control. The whole point of XSS is that the attack surface is the *render path*, not auth."
+      },
+      "trapCategories": [
+        "conflation",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Go handler trace — slides 6–9",
+      "stem": "Consider the Go handler shown across slides 6–9:\n\n```go\nfunc handleSayHello(w http.ResponseWriter, r *http.Request) {\n    name := r.URL.Query()[\"name\"][0]\n    fmt.Fprintf(w, \"<html><body>Hello %s!</body></html>\", name)\n}\n```\n\nA developer claims the bug is in the use of `Fprintf` with `%s` formatting, and rewrites it as:\n\n```go\ncontent := \"<html><body>Hello \" + name + \"!</body></html>\"\nfmt.Fprint(w, content)\n```\n\nWhat happens when the URL `?name=<script>alert(1)</script>` is then loaded?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The injection is neutralized because string concatenation does not perform format-string interpolation."
+        },
+        {
+          "id": "B",
+          "text": "The injection is neutralized because Go automatically escapes strings written with `+`."
+        },
+        {
+          "id": "C",
+          "text": "The injection still fires, because the vulnerability is at the HTML rendering boundary, not at the Go string-construction boundary."
+        },
+        {
+          "id": "D",
+          "text": "The injection fires only if the attacker also includes a `%s` in the URL parameter."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "This is the exact point of slide 9. The vulnerability has nothing to do with `%s`; `%s` is just one way of building a string that contains untrusted bytes in a control position. The bug lives at the *output* boundary — the bytes reach the browser as part of the HTML body. Any string-construction technique (`%s`, `+`, `fmt.Sprintf`, templates without auto-escape) produces the same response and the same alert dialog. The fix has to happen at the rendering step (`html.EscapeString` or a context-aware template engine), not at the concatenation step.",
+      "distractorAnalysis": {
+        "A": "\"Format-string interpolation\" is a red herring. `%s` is not the threat; the threat is putting raw user bytes inside an HTML body context. Removing `%s` changes nothing about that.",
+        "B": "Plausible-sounding but absolutely false. Go does *not* auto-escape strings written with `+`. There is no implicit sanitization in `string + string`.",
+        "D": "Confuses HTML injection with format-string vulnerabilities (a separate C/printf-style bug class). HTML injection requires no `%s` anywhere — the parser treats `<script>` as a tag based on the bytes alone."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "false-claim"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q04",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Stored XSS attack sequence — slide 12",
+      "stem": "The slide 12 diagram shows five steps for stored XSS:\n1. Attacker injects malicious script into bank.com\n2. Victim requests content\n3. bank.com sends the malicious script\n4. Victim browser executes the malicious script\n5. Steal data / make malicious requests\n\nWhich single step structurally distinguishes *stored* XSS from *reflected* XSS, and why?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Step 4 — only stored XSS executes the script in the victim's browser; reflected XSS executes it on the server."
+        },
+        {
+          "id": "B",
+          "text": "Step 1 — in stored XSS the injection happens once, in advance, and persists on the legitimate server independent of any specific victim's request."
+        },
+        {
+          "id": "C",
+          "text": "Step 5 — only stored XSS can steal session tokens; reflected XSS can only run alerts."
+        },
+        {
+          "id": "D",
+          "text": "Step 3 — only stored XSS sends the script over HTTPS; reflected XSS uses plaintext HTTP."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The defining structural property of stored XSS is that the malicious payload is *persisted* on the legitimate server (in a comment, profile, post, etc.) before any victim arrives. Step 1 happens once and decouples in time from steps 2–5. Reflected XSS reverses this: the payload lives in a request that the victim must be tricked into issuing. So the same diagram for reflected XSS replaces step 1 with \"attacker causes victim to make malicious request\" — the injection is per-victim and synchronous with the visit.",
+      "distractorAnalysis": {
+        "A": "Mechanism flip — *both* variants execute in the victim's browser. That's what makes them XSS. Reflected XSS is not server-side execution; it's client-side execution of a script the server happened to reflect.",
+        "C": "Capability conflation — both variants give the attacker full origin privileges, including session-token theft. The capability set is identical; the *delivery mechanism* differs.",
+        "D": "Irrelevant qualifier — transport security (HTTP vs HTTPS) is orthogonal to XSS. Both variants work over either."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q05",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Reflected XSS attack sequence — slide 14",
+      "stem": "Slide 14's reflected-XSS diagram shows the attacker first having to \"cause a malicious request\" (step 1) before the victim's browser issues that request to bank.com. The lecture lists several techniques for accomplishing step 1. Which of the following is **not** a valid technique shown in the lecture for this step?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Embedding a 1×1 pixel iframe pointing to the reflected-XSS URL on an attacker-controlled page."
+        },
+        {
+          "id": "B",
+          "text": "Tricking the victim into clicking a malicious link sent via social media or text message."
+        },
+        {
+          "id": "C",
+          "text": "Hosting an attacker page that issues an HTTP redirect to the reflected-XSS URL."
+        },
+        {
+          "id": "D",
+          "text": "Compromising the victim's DNS resolver so requests to bank.com are sent to the attacker's server."
+        }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "The lecture's slide 15 lists three categories for triggering the reflected request: hidden iframe, tricked click, and attacker-page-redirect. DNS poisoning is a different attack class entirely — it would route the victim *away* from `bank.com`, which defeats the point of reflected XSS (the script must execute *under bank.com's origin*, which only happens if bank.com is the actual server replying). DNS poisoning is the wrong category of attack for this delivery problem.",
+      "distractorAnalysis": {
+        "A": "Directly named on slide 15 with the exact code snippet `<iframe height=1 width=1 src=\"http://google.com/search?q=<script>alert(1)</script>\">`.",
+        "B": "Directly named on slide 15 (\"posting on social media, sending a text, etc.\").",
+        "C": "Directly named on slide 15 (\"the attacker's website, which redirects to the reflected XSS link\")."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q06",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Reflected XSS vs CSRF",
+      "stem": "A user clicks a malicious link. The link causes their browser to send a request that includes their session cookie, and the legitimate server processes the request. Which property determines whether this is reflected XSS or CSRF?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Whether the URL is HTTPS — XSS requires HTTPS, CSRF works over plain HTTP."
+        },
+        {
+          "id": "B",
+          "text": "Whether the legitimate server's *response* contains attacker-controlled JavaScript that executes in the victim's browser."
+        },
+        {
+          "id": "C",
+          "text": "Whether the user is logged in — XSS only works when the user is authenticated, CSRF only works when the user is anonymous."
+        },
+        {
+          "id": "D",
+          "text": "Whether the malicious request uses GET or POST — XSS requires GET, CSRF requires POST."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 16 nails this exactly. XSS = the *response* contains injected JavaScript that runs *client-side* in the victim's origin. CSRF = the malicious *request* (carrying the user's cookies) causes a *server-side* effect, and the attacker doesn't need or get to read the response. The dividing line is response-side script execution. Same delivery mechanism (a clicked link), entirely different attack surface.",
+      "distractorAnalysis": {
+        "A": "Irrelevant qualifier — both attacks are transport-agnostic. Inventing an HTTPS rule is a fabricated distinction.",
+        "C": "Inverts the truth — *both* attacks typically depend on the user being authenticated (CSRF needs the cookie to be sent automatically; XSS often targets the cookie). Neither requires anonymity. This is a plausible misconception that swaps the role of authentication.",
+        "D": "Method confusion — CSRF works with GET *or* POST (and was historically devastating with GET image-tag attacks). XSS doesn't care about method. The HTTP-method axis is unrelated to the attack-classification axis."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "fabricated-detail",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q07",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Stored XSS attack chain",
+      "stem": "Walk through a stored XSS attack against a forum site. At which step in the chain below would *server-side output escaping with `html.EscapeString`* sever the attack?\n\nSteps:\n(i) Attacker submits `<script>steal()</script>` as a forum post.\n(ii) Server stores the post in its database verbatim.\n(iii) Victim requests the page containing the post.\n(iv) Server constructs the page HTML, inserting the stored post into the body.\n(v) Server sends the page to the victim's browser.\n(vi) Browser parses the HTML and executes the embedded `<script>` tag.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Step (i) — escaping rejects the request before the post is ever submitted."
+        },
+        {
+          "id": "B",
+          "text": "Step (ii) — escaping transforms the bytes before they hit the database."
+        },
+        {
+          "id": "C",
+          "text": "Step (iv) — escaping converts `<script>` into `&lt;script&gt;` *as it is being inserted into the page*, so step (vi) sees text, not a tag."
+        },
+        {
+          "id": "D",
+          "text": "Step (vi) — escaping runs in the victim's browser and intercepts the parser."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Sanitization is an *output*-side defense. It runs at the moment user-supplied bytes are placed into a specific rendering context (HTML body, attribute, JS string, URL — each needing different rules). At step (iv), `html.EscapeString` replaces `<` with `&lt;` and `>` with `&gt;`. By the time the HTML reaches the browser at step (vi), the parser sees `&lt;script&gt;steal()&lt;/script&gt;` — entity references that render as visible text, not a parseable tag. Execution never starts.",
+      "distractorAnalysis": {
+        "A": "Plausible misconception — \"input validation\" / \"input sanitization\" is a popular but incorrect mental model. Escaping at submission ties bytes to one context (HTML body) too early; the same bytes might later need different escaping for a JSON endpoint or an `href` attribute. Output-time escaping is the discipline the lecture teaches.",
+        "B": "Same trap as A but applied to storage. Escaping during write conflates storage with rendering; also corrupts the stored data for any non-HTML consumer. - **C is the answer.**",
+        "D": "Mechanism conflation — the *browser* doesn't run `html.EscapeString`. That's a server-side Go library function. The browser only sees what the server sent, and at step (vi) it's already too late if the server sent raw `<script>`."
+      },
+      "trapCategories": [
+        "conflation",
+        "plausible-misconception",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q08",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Reflected XSS attack chain",
+      "stem": "The attacker's page contains `<iframe src=\"https://search.example.com/?q=<script>fetch('/transfer?to=attacker')</script>\" height=1 width=1>`. Walk the chain. At which step does the *browser commit to executing the script under search.example.com's origin*?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The moment the victim loads the attacker's page (because the iframe element is parsed)."
+        },
+        {
+          "id": "B",
+          "text": "The moment the victim's browser issues the GET request to search.example.com."
+        },
+        {
+          "id": "C",
+          "text": "The moment search.example.com sends back an HTTP response whose HTML body contains the literal `<script>fetch(...)</script>` tag."
+        },
+        {
+          "id": "D",
+          "text": "The moment the victim's browser parses the search.example.com response and reaches the inline `<script>` element."
+        }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "The execution decision happens inside the iframe's document parser, after the response is loaded under `search.example.com`'s origin and the parser encounters the `<script>` element. That is the precise instant at which (i) the document's origin is fixed (search.example.com), (ii) the script tag is recognized as control, and (iii) the browser hands its body to the JS engine — under that origin. The earlier steps merely *transport* bytes; only D *commits* to running them with origin privileges.",
+      "distractorAnalysis": {
+        "A": "Iframe element parsing only schedules a navigation; no script from the target site has been fetched yet, let alone parsed. No origin decision has been made.",
+        "B": "The request is *outbound*; nothing executes on a request alone. CSRF lives here, but XSS doesn't — XSS needs the response to carry executable bytes.",
+        "C": "Sending the response over the wire isn't execution; the response could still be blocked by a Content-Type restriction, a CSP `script-src 'self'` directive, or an XSS filter. Execution only happens when the parser walks into a script context. The professor's mechanism-over-surface reasoning rules this out."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q09",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "HTML sanitization",
+      "stem": "A web app calls a trusted HTML-escaping library on every user-supplied value before inserting it into the response. Which of the following does this defense **not** provide?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Protection against `<script>` tags injected into HTML body contexts."
+        },
+        {
+          "id": "B",
+          "text": "Protection against attacker JavaScript that is loaded from an attacker-controlled domain via a `<script src=\"...\">` tag the server never produced."
+        },
+        {
+          "id": "C",
+          "text": "Protection against `\"`-based attribute breakouts in `href` and `value` attributes when the escaper handles HTML entities."
+        },
+        {
+          "id": "D",
+          "text": "Protection against `<svg onload=\"...\">` payloads in HTML body contexts."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "HTML sanitization neutralizes attacker bytes that the server is about to insert into its own response. It does *nothing* about scripts the browser loads from elsewhere — for that you need CSP's `script-src` directive. Sanitization is a same-byte defense (the bytes the server is about to render); CSP is a same-source defense (which origins are allowed to deliver code at all). The two defenses cover disjoint failure modes — that's why the lecture pairs them.",
+      "distractorAnalysis": {
+        "A": "Sanitization absolutely covers this — it's the canonical case. `<` becomes `&lt;`, parser sees text.",
+        "C": "A correctly-scoped HTML entity escaper handles `\"` (`&quot;`) and `'` (`&#39;`), preventing attribute-context breakouts. (A poorly-scoped one wouldn't — but the question stipulates a trusted library and HTML entities.)",
+        "D": "`<svg onload>` still contains `<` and `>` in the body context, so the escaper neutralizes it the same way as `<script>`."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Sanitization at output, not input",
+      "stem": "Why does the lecture insist on escaping at the *output* (rendering) step rather than at *input* (when the user submits data)?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the same byte sequence is dangerous in some contexts (HTML body) and harmless in others (a JSON API response), and only the rendering site knows which context applies."
+        },
+        {
+          "id": "B",
+          "text": "Because input-time escaping would slow down form submission too much for production traffic."
+        },
+        {
+          "id": "C",
+          "text": "Because attackers can bypass input-time escaping by submitting requests directly to the database, skipping the input layer."
+        },
+        {
+          "id": "D",
+          "text": "Because output-time escaping is enforced by the browser, while input-time escaping is not."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Different contexts demand different escaping rules: HTML body needs `&lt;`; HTML attributes need `&quot;` and quoting; JavaScript string contexts need `\\u003c` style escapes; URLs need percent-encoding; CSS needs its own. The same stored value (e.g., a username) might be rendered into all of these contexts at different times. Escaping once at input commits to a single context — wrong for every other use, and corrupts the value for non-HTML consumers (e.g., displaying the username in an email subject line). Escape *where* and *when* the bytes hit a parser, with the rules of *that* parser.",
+      "distractorAnalysis": {
+        "B": "Performance is irrelevant — escaping is microseconds. This is a fabricated economic justification, not a security one.",
+        "C": "Attackers don't usually have a path \"directly to the database\" that bypasses the input layer; if they did, the bug is far worse than XSS. This conflates XSS with SQL injection / unauthenticated DB access.",
+        "D": "Mechanism flip — the *browser* enforces CSP, not sanitization. Sanitization runs server-side regardless of timing. This swaps the enforcement model of two different defenses."
+      },
+      "trapCategories": [
+        "conflation",
+        "fabricated-detail",
+        "mechanism-test",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q11",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Content Security Policy",
+      "stem": "A site deploys a CSP that disallows inline scripts and only allows scripts from `self`. The site has a stored XSS vulnerability where attacker text is inserted unsanitized into the HTML body. Which of the following does CSP, on its own, **not** provide in this scenario?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Prevention of inline `<script>alert(1)</script>` execution from the injected payload."
+        },
+        {
+          "id": "B",
+          "text": "Prevention of `<script src=\"https://attacker.com/evil.js\">` execution from the injected payload."
+        },
+        {
+          "id": "C",
+          "text": "Prevention of the attacker's bytes from being *delivered* in the HTTP response in the first place."
+        },
+        {
+          "id": "D",
+          "text": "Prevention of new external script sources being added without changing the response header."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "CSP is a runtime control on what the browser is allowed to *do* with bytes it received. It cannot stop the server from emitting attacker-controlled bytes into the HTML; it can only stop those bytes from triggering script execution once the browser parses them. The injection still happens — visitors will see whatever raw text the attacker put there, including any HTML the attacker uses for visual deception. Sanitization is the defense that prevents emission of dangerous bytes; CSP is the seatbelt for when sanitization fails.",
+      "distractorAnalysis": {
+        "A": "CSP without `unsafe-inline` blocks inline script execution — that's exactly what the policy described does.",
+        "B": "With `script-src 'self'`, scripts loaded from `attacker.com` are blocked at fetch time.",
+        "D": "Sources are statically declared in the header; a response body cannot extend the allow-list at runtime, so an attacker can't introduce a new trusted source via injection."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q12",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Defense composition — sanitization + CSP",
+      "stem": "The lecture treats HTML sanitization and CSP as complementary defenses. A team is debating whether they really need both. Which scenario most directly justifies pairing them?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "A team uses a context-aware template engine that escapes everything correctly. They add CSP \"just in case the template engine has a bug or a developer bypasses it with a raw-HTML helper, so attacker bytes can't escalate to executing code.\""
+        },
+        {
+          "id": "B",
+          "text": "A team has perfect CSP that blocks all inline and external scripts. They add sanitization \"to make CSP enforcement faster in the browser.\""
+        },
+        {
+          "id": "C",
+          "text": "A team uses HTTP rather than HTTPS. They add both defenses \"because TLS would make sanitization redundant.\""
+        },
+        {
+          "id": "D",
+          "text": "A team's site is purely static HTML with no user input. They add both \"to defend against future XSS even though no rendering of user input occurs today.\""
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "This is the textbook defense-in-depth argument the lecture builds. Sanitization is the primary defense at the bytes-to-output boundary; CSP is the secondary control at the bytes-to-execution boundary. Each catches the failure of the other: a sanitization gap (forgotten field, wrong context, raw-HTML escape hatch) is the exact case CSP exists to backstop, and a misconfigured CSP (overly permissive `script-src`, an allowed CDN with stored content) is the case sanitization still defends against.",
+      "distractorAnalysis": {
+        "B": "Inverts the logic — sanitization doesn't speed up CSP. CSP enforcement is browser-side and unrelated to whether server-side bytes are escaped. This is a fabricated performance claim.",
+        "C": "Confidentiality/integrity flip plus a layer mix. TLS prevents eavesdropping on the wire; it has nothing to do with whether `<script>` in the response body executes. TLS doesn't make sanitization redundant.",
+        "D": "A static site with no user-input rendering has no XSS surface to defend. \"Future XSS\" is hand-waving; defenses without an attack surface are noise, not defense-in-depth."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "fabricated-detail",
+        "performance-irrelevance"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q13",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Sanitized handler — slide 18",
+      "stem": "Slide 18 shows the sanitized version of the Go handler:\n\n```go\nfmt.Fprintf(w, \"<html><body>Hello %s!</body></html>\", html.EscapeString(name))\n```\n\nA second developer sees this and proposes that the same `html.EscapeString` will protect a handler that inserts `name` inside a JavaScript string literal:\n\n```go\nfmt.Fprintf(w, \"<script>var u = '%s';</script>\", html.EscapeString(name))\n```\n\nWhy is the second developer wrong?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "`html.EscapeString` is single-use and cannot be called twice in the same handler."
+        },
+        {
+          "id": "B",
+          "text": "The second handler runs in the JavaScript parser context, which interprets `'`, `\\`, and newlines as syntax — characters that HTML escaping does not touch."
+        },
+        {
+          "id": "C",
+          "text": "`html.EscapeString` only works on output of length ≤ 256 bytes and the JS string may be longer."
+        },
+        {
+          "id": "D",
+          "text": "The second handler uses `<script>` tags, which CSP would have already blocked, making escaping redundant."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the canonical \"escape for the right context\" trap. `html.EscapeString` is built for HTML body/attribute contexts — it converts `<`, `>`, `&`, `\"`, `'` into entities. But once you're inside a `<script>` block, the parser is no longer HTML; it's JavaScript. A name like `'; steal(); //` slips right past HTML escaping (no `<` or `>` to convert) and breaks out of the JS string literal. JS-string contexts need JS-string escaping (`\\u003c`, `\\x27`, etc.) — different rules entirely. This is *exactly* the principle behind Q10: the escaper must match the parser at the rendering site.",
+      "distractorAnalysis": {
+        "A": "Fabricated technical limit — `html.EscapeString` is a pure function with no usage cap.",
+        "C": "Fabricated length limit — the function operates on arbitrary strings.",
+        "D": "Conflates layered defenses — even with CSP, an injected script that exploits a JS-context escaping gap can violate origin assumptions or exfiltrate data via allowed channels (e.g., `fetch` to a same-origin endpoint that proxies). And CSP does not eliminate the need for proper escaping; the developer's claim of \"redundant\" misreads defense-in-depth."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q14",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "XSS payloads beyond `<script>`",
+      "stem": "A developer claims their XSS filter is safe because it strips every `<script>` tag (and its content) from user input before storage. Which of the following payloads still results in attacker-controlled JavaScript executing in the victim's browser?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "`<svg onload=\"fetch('/api/transfer?to=attacker')\">`"
+        },
+        {
+          "id": "B",
+          "text": "`<p>Hello, please send me $50.</p>`"
+        },
+        {
+          "id": "C",
+          "text": "`<a href=\"https://attacker.com\">Click me</a>`"
+        },
+        {
+          "id": "D",
+          "text": "`<!-- <script>alert(1)</script> -->`"
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Script execution is not gated on the literal `<script>` element — *any* tag that supports an event-handler attribute (`onload`, `onerror`, `onclick`, `onmouseover`…) can run JavaScript. `<svg onload=\"...\">` evaluates the handler when the SVG element is parsed, with full origin privileges, no `<script>` tag required. This is the canonical \"blocklist sanitization is unsound\" example. Real defenses use *allowlists* of safe elements/attributes or whole-context escaping.",
+      "distractorAnalysis": {
+        "B": "Plain text in a paragraph — not script execution, not even an attack. Distractor designed to look \"obviously safe\" so the student picks it as the safe option (this is a what-runs-code question).",
+        "C": "A standard anchor — clicking it navigates to attacker.com, but no script executes in `legit.com`'s origin. This is phishing-flavored, not XSS.",
+        "D": "HTML comments are not parsed as script. The `<script>` inside is dead text to the parser. Plausible misconception — students think \"the parser still sees those bytes.\" It does, but only as comment content."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q15",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Misdiagnosed XSS defenses",
+      "stem": "A new developer suggests four defenses against XSS. Three of them either don't work or solve the wrong problem. Which one is the *only* mechanistically correct XSS defense?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "\"We'll use HTTPS so the attacker can't tamper with the response in transit.\""
+        },
+        {
+          "id": "B",
+          "text": "\"We'll mark all our session cookies `Secure` so JavaScript can't read them.\""
+        },
+        {
+          "id": "C",
+          "text": "\"We'll context-escape every user-supplied value at the rendering step using a trusted library.\""
+        },
+        {
+          "id": "D",
+          "text": "\"We'll log all user input to detect malicious payloads and ban offending users.\""
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Output-context escaping at the rendering step is *the* defense for the parser-confusion mechanism that XSS exploits. It directly removes the failure: bytes that would have been parsed as control are emitted as data.",
+      "distractorAnalysis": {
+        "A": "Confidentiality/integrity flip — TLS prevents wire-level tampering, but XSS doesn't tamper with anything in transit. The attacker submits malicious input through legitimate channels; the *server itself* willingly delivers the malicious response. TLS makes this delivery more authentic, not less.",
+        "B": "Mechanism mislabel — the `Secure` flag restricts cookies to HTTPS connections; it does *not* prevent JavaScript from reading them. The flag the developer is thinking of is `HttpOnly`, and even `HttpOnly` doesn't *prevent* XSS — it only blocks one consequence (cookie theft) while leaving the attacker free to make authenticated requests directly from the victim's browser. Detection-by-symptom, not by mechanism.",
+        "D": "Plausible misconception — logging is forensics, not prevention. Banning users after the fact assumes detection is reliable (it isn't — see polyglot payloads, encoded variants) and that the attack hasn't already succeeded. This is the classic \"blame the user input\" trap; the lecture's normative claim is that defense lives in the system, not in catching offenders."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Why the browser trusts user clicks",
+      "stem": "The lecture identifies the root mechanism enabling clickjacking as: \"the browser trusts the user's clicks.\" What does this mean operationally?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The browser performs OCR on the screen to confirm the user clicked on the visually labeled element, and grants the click only if the labels match."
+        },
+        {
+          "id": "B",
+          "text": "The browser routes a click to whichever DOM element occupies the screen coordinates of the cursor at click time, with no inspection of how that element came to be there."
+        },
+        {
+          "id": "C",
+          "text": "The browser only delivers clicks to elements explicitly authorized by the page's CSP."
+        },
+        {
+          "id": "D",
+          "text": "The browser asks the user for confirmation any time a click triggers a privileged action."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The browser's click-delivery model is purely geometric. It looks at the cursor coordinates, finds the topmost interactive element under those coordinates, and dispatches a click event to it. There is no perceptual check — no comparison between what the user *thought* they were clicking and what the DOM says they clicked. That gap is the entire attack surface: stack an opaque iframe over a benign-looking decoy and the user's click lands inside the iframe.",
+      "distractorAnalysis": {
+        "A": "Fabricated mechanism — browsers do not OCR screens to validate clicks.",
+        "C": "Mechanism transplant — CSP governs what scripts/resources can load, not click routing. Click dispatch is unrelated to CSP.",
+        "D": "Inverts the actual default — the lecture explicitly notes that asking for confirmation \"annoys users (consider human factors!)\" and is used sparingly. The browser's default is to trust, not to confirm."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q17",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Invisible iframe variants — slide 24",
+      "stem": "Slide 24 lists three invisible-iframe clickjacking variants. A page shows a giant \"PLAY VIDEO\" button with festive graphics, while a 100% transparent iframe covering the same screen region loads `bank.com/transfer?to=attacker&amount=1000`. The user clicks the button. Which variant is this, and what is the structural failure?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Variant #1 (legitimate site visible *under* invisible malicious content) — the attacker's UI hides the legitimate site so the user can't see what they're confirming."
+        },
+        {
+          "id": "B",
+          "text": "Variant #2 (legitimate site framed *invisibly over* visible enticing content) — the user sees the decoy but the click lands on the invisible legitimate iframe stacked on top."
+        },
+        {
+          "id": "C",
+          "text": "Variant #3 (legitimate site visible *under* malicious overlay) — the legitimate site renders fully and the overlay only partially obscures it."
+        },
+        {
+          "id": "D",
+          "text": "None of the above — this is cursorjacking, not invisible-iframe clickjacking."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The user *sees* the decoy (\"PLAY VIDEO\") and the attacker has placed the *legitimate* `bank.com` iframe transparently *on top* of that decoy. Geometric click dispatch (Q16) routes the click to the topmost element — the invisible iframe — even though the user's perceptual target was the visible decoy below. That mismatch — visible bait below, invisible target above — is variant #2.",
+      "distractorAnalysis": {
+        "A": "Variant #1 inverts the layering — the legitimate site is on top (visible), with malicious content hidden underneath waiting to receive the click that the user *thinks* hits the legitimate site. The scenario describes the opposite stacking.",
+        "C": "Variant #3 leaves the legitimate site visible with only a partial overlay — useful when the attacker wants the user to recognize the legitimate UI, e.g., to lend credibility. Doesn't fit \"legitimate site fully invisible.\"",
+        "D": "Cursorjacking misroutes the *cursor*; here the cursor is at the apparent click location. The misroute is in the *element stack*, not the cursor position."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q18",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Temporal clickjacking — slides 25–26",
+      "stem": "In the temporal attack shown on slides 25–26, the user is instructed to *double-click* a \"Click here\" button. Trace the timeline:\n\n(t=0) User reads \"double-click to continue\" and aims cursor at the button.\n(t=1) User performs first click. JavaScript detects the click event.\n(t=2) JavaScript replaces the visible content with a permission dialog whose \"Allow\" button sits exactly where the user's cursor still hovers.\n(t=3) User performs the second click — already in motion from the double-click intention.\n\nWhich defense, applied to the permission dialog, breaks this chain at exactly step (t=3)?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "X-Frame-Options: DENY on the permission dialog's source page."
+        },
+        {
+          "id": "B",
+          "text": "CSP `script-src 'self'` to block the JavaScript that swapped the UI."
+        },
+        {
+          "id": "C",
+          "text": "A timing rule that disables the \"Allow\" button for ~1 second after the dialog gains focus, so the second click hits a non-interactive element."
+        },
+        {
+          "id": "D",
+          "text": "HTML sanitization of the user's nickname displayed inside the dialog."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "This is exactly the Firefox temporal-integrity defense from slide 30. The structural problem is that the user's perception lags the page change; the second click is in flight before the brain registers that the dialog appeared. A \"minimum focus dwell\" before the action button becomes clickable closes the perception window — by the time the button is live, the user has registered the new dialog and can choose. The defense matches the attack at the *temporal* layer.",
+      "distractorAnalysis": {
+        "A": "X-Frame-Options is a *spatial* defense — it prevents the legitimate page from being embedded in an iframe. The temporal attack here doesn't require iframing the legitimate site; the swap is between two pieces of attacker-controlled UI on the same page (or a real OS-level dialog appearing under the cursor). Frame-busting doesn't address the timing race.",
+        "B": "Blocking the swap script would help in *some* temporal variants, but this answer assumes the attacker's JS lives in a CSP-restricted context. In the lecture's setup, the script is the attacker's own page — CSP applies to *that* page, controlled by the attacker, who simply omits the policy. CSP is not a control over attacker-owned origins.",
+        "D": "Mislayer — sanitization defends against XSS, not against UI swaps. There is no user input being rendered as HTML in this attack."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q19",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Cursorjacking — slide 27",
+      "stem": "Slide 27 shows two cursors: a *fake* cursor rendered with CSS/JS at one screen location, and the *real* OS cursor hidden or made invisible. Which two browser capabilities are *necessary* for this attack to work?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The ability to load cross-origin iframes and the ability to bypass CSP."
+        },
+        {
+          "id": "B",
+          "text": "The ability to style the cursor's appearance with CSS and the ability to track the cursor's position with JavaScript."
+        },
+        {
+          "id": "C",
+          "text": "The ability to disable the same-origin policy and the ability to read the user's keystrokes globally."
+        },
+        {
+          "id": "D",
+          "text": "The ability to issue HTTP redirects and the ability to override the browser's address bar."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture's slide explicitly names both ingredients. (1) CSS can style cursor appearance — including hiding the real cursor or replacing it. (2) JavaScript can track cursor position via `mousemove`. Combine them: hide the real cursor, render a fake cursor wherever you want the user to *think* they are pointing, but route the click to whatever element is under the *real* (invisible) cursor's position. The attack needs *only* ordinary CSS+JS — no privilege escalation, no SOP bypass.",
+      "distractorAnalysis": {
+        "A": "Cursorjacking does not require cross-origin iframes or CSP bypass; it works on a single attacker-controlled page. This conflates cursorjacking with clickjacking-via-iframe.",
+        "C": "Disabling SOP is not a thing pages can do; reading global keystrokes is not part of cursorjacking. Inflated capabilities — sounds powerful but unrelated.",
+        "D": "Conflates with phishing chrome attacks (browser-in-browser). The cursor attack is about misrouting clicks, not impersonating browser UI."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q20",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Frame-busting (X-Frame-Options / CSP frame-ancestors)",
+      "stem": "A bank rolls out two protective measures simultaneously: (1) sets `X-Frame-Options: DENY` on its sensitive pages, and (2) adds CSP `frame-ancestors 'none'`. An attacker still wants to mount an invisible-iframe clickjack against `bank.com/transfer`. Which of the following is the *most accurate* description of what these defenses accomplish and what they leave unaddressed?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "They prevent `bank.com/transfer` from being loaded inside any iframe at all, eliminating the invisible-iframe variant — but they do not prevent temporal attacks or cursorjacking on the bank's own page if attacker JavaScript runs there via XSS."
+        },
+        {
+          "id": "B",
+          "text": "They prevent the user's clicks from reaching `bank.com` from *any* origin, including direct navigation to `bank.com/transfer`."
+        },
+        {
+          "id": "C",
+          "text": "They prevent XSS payloads from being delivered, because frames are the only delivery vector for stored XSS."
+        },
+        {
+          "id": "D",
+          "text": "They prevent phishing entirely, because users can no longer be tricked into visiting impostor sites."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Frame-busting headers do exactly one thing: instruct the browser to refuse to render the page inside an iframe owned by another origin. That breaks the invisible-iframe attack chain at the moment the iframe tries to load — chain dies. But frame-busting has no effect on (i) attacks that don't use iframes (cursorjacking on attacker-owned pages, temporal attacks), (ii) clickjacking-equivalent UI manipulation that occurs *on* the bank's page if some other vulnerability (like XSS) gives the attacker a foothold there. The mechanism-bound scope is iframe embedding, not \"all UI redress.\"",
+      "distractorAnalysis": {
+        "B": "Absolutist-language distractor — \"any origin, including direct navigation\" is wildly overbroad. Frame-busting only restricts iframe embedding; direct navigation is unaffected (and would be unusable if it weren't).",
+        "C": "Mechanism transplant — XSS delivery has nothing to do with frame embedding. Most stored XSS is delivered through legitimate page loads, not frames.",
+        "D": "Phishing isn't iframe-based; users visit impostor sites by typing URLs or clicking links. Frame-busting is irrelevant."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q21",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Phishing URL checks",
+      "stem": "A user is taught: \"Before entering your password, look at the URL in the address bar. If it shows the right domain *and* a green padlock, you're safe.\" Which of the following best identifies why this advice is fundamentally insufficient?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because most users don't know what a URL is, so the advice can't be operationalized."
+        },
+        {
+          "id": "B",
+          "text": "Because a homograph URL with Cyrillic lookalike characters can render identically to the real domain while having different bytes — and the attacker can register a valid TLS certificate for that lookalike domain."
+        },
+        {
+          "id": "C",
+          "text": "Because TLS certificates expire every 90 days, so the padlock is unreliable."
+        },
+        {
+          "id": "D",
+          "text": "Because the address bar can be edited by JavaScript on the page."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture's slides 33–35 build this point methodically. A homograph URL renders pixel-identical to the legitimate one (e.g., Cyrillic 'а' substituted for Latin 'a') but is a *different domain* under the hood — a domain the attacker can register and obtain a valid certificate for, lighting up the padlock. The user's \"URL + padlock check\" passes; the user is still on the attacker's site. This is a defense-failure-by-mechanism: the user's perceptual primitive (visual reading of bytes) doesn't have the resolution to distinguish the inputs.",
+      "distractorAnalysis": {
+        "A": "The lecture's normative point is \"don't blame the user,\" but that's an ethical claim about defense design, not an explanation of *why* the URL check fails. Even a user who knows what a URL is loses to homographs.",
+        "C": "Certificates do rotate, but valid certificates show the padlock. Expiry isn't the failure mode — visual indistinguishability is.",
+        "D": "False as stated — JavaScript on a normal web page cannot edit the real address bar of the surrounding browser. Confused with the *browser-in-browser* attack, where the attacker draws a *fake* address bar inside their HTML — but that's a different attack the lecture covers separately, and even then the *real* address bar is unchanged. This swaps the layer of attack."
+      },
+      "trapCategories": [
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q22",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Homograph attack mechanism",
+      "stem": "Why does a homograph URL like one using Cyrillic 'а' (U+0430) instead of Latin 'a' (U+0061) defeat both visual inspection and Extended Validation certificates as defenses?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the two characters are encoded by the same byte sequence in UTF-8, so DNS cannot distinguish them."
+        },
+        {
+          "id": "B",
+          "text": "Because EV certificates only verify control of the domain, and the attacker legitimately controls the lookalike domain — so EV's \"verified identity\" attests to the *attacker's* legal entity for that domain, not protection against impersonation."
+        },
+        {
+          "id": "C",
+          "text": "Because the browser silently auto-corrects Cyrillic characters to Latin when resolving DNS."
+        },
+        {
+          "id": "D",
+          "text": "Because EV certificates are no longer issued by any CA."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "EV certificates raise the bar on *who controls this domain* — the CA performs additional identity verification. But identity is verified for the *actual* domain in the cert, which for a homograph is the lookalike domain the attacker registered. So EV legitimately attests \"yes, this domain is controlled by [Attacker LLC].\" The cert is honest; the *user* is the one who can't distinguish the Cyrillic-'а' domain from the Latin-'a' domain. The mechanism gap is between visual identity (what the user reads) and protocol identity (what DNS resolves and the cert binds). EV addresses neither; it addresses *legal entity behind the domain*, which is a third axis.",
+      "distractorAnalysis": {
+        "A": "False — the two characters have *different* byte sequences in UTF-8 (and different code points). That's exactly *why* they're separate domain registrations. The visual identity is the gap; the byte identity is fine.",
+        "C": "Fabricated mechanism — browsers do not silently transliterate Cyrillic to Latin. Some apply IDN display heuristics (showing punycode for suspicious mixes), but those are display-only and don't auto-correct DNS.",
+        "D": "False — EV certificates are still issued."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q23",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Browser-in-browser attack",
+      "stem": "A phishing page renders what appears to be a full second browser window — complete with title bar, address bar showing `https://accounts.google.com`, a green padlock icon, and back/forward buttons — entirely inside the page's HTML body. The user is convinced and enters their Google password. Which observation captures *the* root failure that makes this attack effective?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The user's real browser is misconfigured, allowing pages to spawn child browser windows that bypass URL display."
+        },
+        {
+          "id": "B",
+          "text": "Every \"trust signal\" the user examines (chrome, address bar, padlock) is rendered by the page's HTML/CSS — entirely under the attacker's control — and is indistinguishable from the real chrome rendered by the actual browser."
+        },
+        {
+          "id": "C",
+          "text": "The phishing site has a forged TLS certificate for `accounts.google.com`, which the browser failed to detect."
+        },
+        {
+          "id": "D",
+          "text": "The user's session cookie for Google is automatically sent to the phishing site because of CORS misconfiguration."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The browser-in-browser attack reframes phishing's central trick: the chrome itself is the bait. Address bar, padlock, window title, navigation buttons — all are HTML/CSS painted by the attacker's page inside the real browser's content area. The *real* browser's chrome (one level up) shows the attacker's actual URL — but users typically inspect the chrome they perceive as \"the browser they're talking to.\" The defense advice \"look at the address bar\" assumes the address bar the user looks at is *trusted*. It isn't, because the attacker drew it.",
+      "distractorAnalysis": {
+        "A": "Fabricated mechanism — modern browsers do not let pages spawn child windows that bypass URL display. The attack works without spawning anything; it's drawn inside the existing page.",
+        "C": "Forged certs are detected by certificate validation; that's not the attack vector here. The attacker's *real* domain has a *real* (or no) cert; the phishing chrome merely *displays* a padlock icon as an image.",
+        "D": "Mechanism transplant — there's no automatic cookie sending here. The user types the password into a form; the form posts to the attacker. CORS is unrelated."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "2FA factor classification",
+      "stem": "Two-factor authentication requires the user to present two factors of *different categories*. Which of the following pairs satisfies \"two factors of different categories\" rather than \"two factors of the same category\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The user's account password and the answer to \"What was the name of your first pet?\""
+        },
+        {
+          "id": "B",
+          "text": "The user's account password and a code displayed on the user's hardware authenticator app."
+        },
+        {
+          "id": "C",
+          "text": "The user's fingerprint and a face-ID scan."
+        },
+        {
+          "id": "D",
+          "text": "The user's hardware security key and a USB authenticator dongle."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The three categories are something-you-know, something-you-have, something-you-are. (B) combines something-you-know (password) with something-you-have (hardware authenticator). The whole point of \"different categories\" is that compromising one mechanism (e.g., a password leak in a database) doesn't compromise both factors — they live in different attack surfaces.",
+      "distractorAnalysis": {
+        "A": "Both items are something-you-know. A database leak that exposes passwords typically exposes security-question answers stored alongside. Not two-factor in any meaningful sense.",
+        "C": "Both items are something-you-are (biometrics). A breach of the biometric template store compromises both. Same category.",
+        "D": "Both items are something-you-have. Same category, defeated together by physical theft."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q25",
+      "type": "GAME_WALK",
+      "difficulty": "Trap",
+      "topic": "Relay attack — slide 43",
+      "stem": "In the relay attack message-flow on slide 43, the victim ultimately enters a 2FA code into the phishing page and the attacker submits that same code to Google to log in. Why does the *user's* end of the protocol have no way to detect or refuse this attack at the moment they enter the code?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The code is encrypted in a way only the attacker can decrypt."
+        },
+        {
+          "id": "B",
+          "text": "The 2FA code is a bearer token with no cryptographic binding to the *origin* (domain) actually requesting authentication; it is valid for whoever submits it within the time window, including the attacker."
+        },
+        {
+          "id": "C",
+          "text": "The user's phone is unable to display 2FA codes longer than 6 digits, so any code is ambiguous."
+        },
+        {
+          "id": "D",
+          "text": "The browser silently strips the `Origin` header from POST requests carrying 2FA codes."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the structural reason SMS / TOTP 2FA falls to relay attacks: the code is a *bearer credential* — possession of it is sufficient to authenticate. There's no protocol step that ties \"this code was meant for *this* origin.\" The phone displays the code; the user types it; Google accepts it from whoever holds it. The fix is hardware-key WebAuthn, where the key signs a challenge that *includes the origin* — the key, talking to the phishing site, would sign for `g00gle.com`, not `google.com`, and Google would reject the signature. Origin binding turns the second factor from a bearer credential into a context-bound credential.",
+      "distractorAnalysis": {
+        "A": "False mechanism — the code is plaintext (a 6-digit number on the user's phone). No encryption is involved on the user side. Plausible-sounding to students who confuse 2FA codes with cryptographic protocols.",
+        "C": "Fabricated technical limit — code length is unrelated to bearer-token semantics.",
+        "D": "Mechanism transplant — `Origin` header behavior is irrelevant to the user's typing of a code into a form. The attack works without touching headers."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q26",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Trap",
+      "topic": "What 2FA does NOT defend against",
+      "stem": "A team enables SMS-based 2FA on their service and claims it now defends against \"phishing, password reuse, dictionary attacks, and relay attacks.\" Which item on that list does SMS 2FA *not* defend against?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Password reuse across different sites."
+        },
+        {
+          "id": "B",
+          "text": "Offline dictionary attacks against a leaked password file."
+        },
+        {
+          "id": "C",
+          "text": "Real-time relay attacks where the attacker phishes both the password *and* the SMS code in sequence."
+        },
+        {
+          "id": "D",
+          "text": "Untargeted credential-stuffing attacks using leaked passwords."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "SMS 2FA strengthens the defense against passive credential compromise — leaks, reuse, dictionary cracking — because possession of just the password is no longer enough. But the relay attack is *active* and real-time: the attacker phishes the password, immediately uses it to trigger an SMS code from the real service, then phishes the code from the same victim, then uses it within the time window. SMS 2FA has no origin-binding to detect that the code is being used by the wrong party — Q25's failure mode. Correctly answering this requires distinguishing \"what the second factor proves\" (proof of *possession at this moment*) from \"what it doesn't prove\" (proof of *which site requested it*).",
+      "distractorAnalysis": {
+        "A": "2FA does defend against this — even if the user reuses passwords, the attacker stealing the password from one site can't authenticate to the 2FA-protected site without the second factor.",
+        "B": "2FA does defend — offline cracking yields passwords, but the second factor is a separate live channel that offline cracking cannot produce.",
+        "D": "2FA does defend — credential stuffing tries leaked password sets across many sites; even if a password matches, the attacker lacks the second factor."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q27",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "Hardware key vs SMS — origin binding",
+      "stem": "A hardware security key implementing WebAuthn defeats relay attacks that SMS 2FA cannot. At which precise step does the hardware key's protocol *refuse* to cooperate with the attacker, and why?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "At enrollment — the key refuses to be enrolled with any phishing site because it pre-loads a list of legitimate domains."
+        },
+        {
+          "id": "B",
+          "text": "At each authentication — the key signs a challenge that includes the *origin* the browser is talking to; the phishing origin (e.g., `g00gle.com`) produces a signature the real Google server rejects, because the signed origin doesn't match `google.com`."
+        },
+        {
+          "id": "C",
+          "text": "At each authentication — the key requires the user to type the legitimate domain into the key itself, and refuses if the typed domain doesn't match the page."
+        },
+        {
+          "id": "D",
+          "text": "At each authentication — the key uses a one-time SMS code that is valid for only 10 seconds, defeating relay by being too fast."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The mechanism is *origin binding via signed challenge*. The browser hands the key the origin it is currently talking to (`g00gle.com` if the user is on the phishing site). The key produces a signature `Sign(challenge || origin)`. The real Google server, which expects to see signatures over its own origin (`google.com`), receives a signature with `g00gle.com` baked in and rejects it. The attacker can relay the bytes, but the signature was over the wrong origin and is unforgeable without the key. This is precisely what SMS bearer tokens lack: the origin never enters the credential.",
+      "distractorAnalysis": {
+        "A": "Fabricated mechanism — the key has no allowlist of legitimate domains; it works with any site that registers it. Defense is at *use*, not at *enrollment*.",
+        "C": "Fabricated UI — hardware keys don't have keyboards; the user doesn't type domains into them. The browser supplies the origin to the key automatically.",
+        "D": "Mechanism transplant — hardware keys do not use SMS codes. Relay attacks succeed against SMS regardless of code lifetime if the attacker is operating in real time. \"Faster code\" is a folk defense, not a real one."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L10-Q28",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "XSS + cookie attributes — the after-HttpOnly attack",
+      "stem": "A bank's session cookie is marked `HttpOnly`, so JavaScript cannot read it. A reflected XSS vulnerability still exists on the bank's transfer page. The attacker exploits the XSS. The cookie cannot be exfiltrated. Has the attack failed? Why or why not?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Yes — without the cookie, the attacker has no authentication material, so the attack provides no value."
+        },
+        {
+          "id": "B",
+          "text": "No — the attacker's JavaScript runs *under the bank's origin* in the victim's browser; it can issue authenticated `fetch` requests to the bank (the browser attaches the HttpOnly cookie automatically), executing transfers, password changes, or other state-changing actions. Cookie theft is *one* consequence of XSS; cookie *use* is another."
+        },
+        {
+          "id": "C",
+          "text": "Yes — HttpOnly causes the XSS payload itself to be ignored by the JavaScript engine."
+        },
+        {
+          "id": "D",
+          "text": "No — the attacker can downgrade the cookie's HttpOnly attribute by sending a Set-Cookie response from JavaScript."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The most important consequence of running attacker JavaScript inside the legitimate origin is *not* reading the cookie — it's the ability to make *authenticated requests on the user's behalf*. The browser attaches the cookie (HttpOnly or not) to every same-origin request automatically. So the attacker's `fetch('/transfer?to=attacker&amount=1000')` from inside the bank's origin succeeds with the user's full authority. HttpOnly is a meaningful but partial defense — it stops cookie *exfiltration* but doesn't stop cookie *use*. This is the precise distinction the lecture's defense-in-depth thread is meant to teach: each defense closes a specific failure mode, not all of them.",
+      "distractorAnalysis": {
+        "A": "Conflates \"the attacker has no cookie value\" with \"the attacker has no auth power.\" The cookie *value* is unnecessary if the *browser* attaches the cookie on the attacker's behalf. Same effect, no theft needed.",
+        "C": "Mechanism transplant — HttpOnly governs DOM cookie access, not whether script tags execute. Script execution is unchanged.",
+        "D": "False — Set-Cookie from JavaScript can only set cookies the script can already set; it cannot alter the HttpOnly flag of an existing server-set cookie. Plausible misconception that confuses script-cookie capabilities with server-cookie controls."
+      },
+      "trapCategories": [
+        "conflation",
+        "cross-cutting-synthesis",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

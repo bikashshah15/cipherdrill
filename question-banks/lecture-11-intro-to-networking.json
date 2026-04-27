@@ -1,0 +1,1019 @@
+{
+  "lectureId": "lecture-11-intro-to-networking",
+  "lectureTitle": "Intro to Networking",
+  "lectureNumber": 11,
+  "topics": [
+    "Why layered abstraction",
+    "Protocols — syntax vs semantics",
+    "Postal mail analogy",
+    "MAC address vs cryptographic MAC",
+    "HTTP encapsulation — which headers rewrite",
+    "What IP does NOT provide",
+    "Encapsulation walkthrough — sending",
+    "Scope of MAC vs IP addressing",
+    "Layer identification of attacks",
+    "Mixed-medium routed network",
+    "Checksum vs cryptographic integrity",
+    "Reliability vs integrity confusion",
+    "Decapsulation walkthrough — receiving",
+    "What Layer 2 does NOT provide",
+    "Header visibility under TLS",
+    "HTTP encapsulation — field identification",
+    "Why ports exist",
+    "TLS as Layer 4.5",
+    "Layer 1 — bit transmission scope",
+    "MAC filtering as security",
+    "Tampered encapsulation",
+    "Software stack analogy",
+    "Why crypto exists in the stack",
+    "Firewall capability across layers",
+    "Layer substitution and design tradeoffs",
+    "Tracking MAC and IP across hops"
+  ],
+  "questions": [
+    {
+      "id": "L11-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Why layered abstraction",
+      "stem": "A networking textbook claims that the OSI model is \"useful because each layer abstracts the one below it.\" Which of the following best explains *why* this abstraction is the central design property of the Internet, rather than just a teaching convenience?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Layering reduces the total number of bytes that need to be transmitted, because each layer compresses its payload."
+        },
+        {
+          "id": "B",
+          "text": "Layering allows any single layer's protocol to be replaced or reimplemented without forcing changes in any other layer."
+        },
+        {
+          "id": "C",
+          "text": "Layering ensures that messages cannot be intercepted, because each layer hides the layer above it."
+        },
+        {
+          "id": "D",
+          "text": "Layering guarantees that all messages will be delivered reliably, because lower layers correct errors made by higher layers."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The mechanism that makes layering valuable is *substitutability*. Each layer relies only on the *services* (not the implementation) of the layer below, and exposes only its *services* (not its implementation) to the layer above. That contract is what lets the same IP packet ride over Wi-Fi today and Ethernet tomorrow without TCP or HTTP knowing or caring.",
+      "distractorAnalysis": {
+        "A": "Plausible misconception — layering does not reduce bytes; it *adds* headers at each step (encapsulation overhead). The benefit is structural, not byte-economic.",
+        "C": "Conflates abstraction with confidentiality. Layers don't hide each other from attackers — TLS hides Layer 7 from network observers, but layering by itself provides zero security.",
+        "D": "Absolutist language (\"guarantees... reliably... corrects errors\"). The lower layer (IP) is explicitly *unreliable*. Reliability is added at Layer 4 only when needed (TCP), and even then it is not absolute."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Protocols — syntax vs semantics",
+      "stem": "The lecture defines a protocol as having both *syntax* and *semantics*. A student claims, \"If two implementations agree on syntax, they will interoperate correctly.\" Why is this claim wrong as a matter of protocol design?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Syntax determines compression efficiency, and without matching compression, frames will be lost."
+        },
+        {
+          "id": "B",
+          "text": "Syntax fixes only the format and order of messages; semantics fixes what each message *means* and what action is taken — two implementations can parse identical bytes and still take incompatible actions."
+        },
+        {
+          "id": "C",
+          "text": "Syntax always changes between protocol versions, so agreement on syntax cannot be maintained over time."
+        },
+        {
+          "id": "D",
+          "text": "Syntax includes encryption, but semantics determines the key, so without shared semantics no message can be decrypted."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture's definition is precise: syntax = format and order; semantics = meaning and action taken. Two endpoints that share syntax but disagree on semantics will both successfully *parse* a message and then do incompatible things with it — exactly the class of bug that gives rise to many real-world protocol attacks (HTTP request smuggling is a textbook example: the load balancer and origin server agree on syntax, disagree on which byte ends the request).",
+      "distractorAnalysis": {
+        "A": "Plausible misconception that mixes compression into the syntax/semantics distinction. Compression is orthogonal.",
+        "C": "Absolutist (\"always changes\") and irrelevant. Versioning is its own concern.",
+        "D": "Conflates protocol layering with encryption layering. Most protocols defined in this lecture (IP, TCP, Ethernet) have no encryption at all."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "conflation",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Postal mail analogy",
+      "stem": "The professor spends seven slides walking through Alice mailing a note to Bob through a person-layer, an office-layer, and a mail-truck-layer, with envelopes nested inside envelopes. The single most important point of this analogy is:",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The postal service is reliable, so layered networking inherits its reliability."
+        },
+        {
+          "id": "B",
+          "text": "Each layer reads only its own envelope and treats the inner contents as opaque, exactly as each network layer reads only its own header."
+        },
+        {
+          "id": "C",
+          "text": "Layered networking requires all participants to be in the same physical location, like a single post office."
+        },
+        {
+          "id": "D",
+          "text": "The mail truck represents Layer 4, because trucks are the most \"transport-like\" mode in the analogy."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The analogy's payload is *encapsulation*. The mail truck handles the outer address envelope and never opens the inner envelope; the office handles the inner envelope and never reads the message. This mirrors how the link layer handles MAC headers without reading the IP header, and how IP routers read IP headers without parsing TCP. Each layer is opaque to the layers it doesn't own.",
+      "distractorAnalysis": {
+        "A": "Plausible-but-irrelevant misconception. The analogy is structural, not a claim about reliability. IP itself is unreliable.",
+        "C": "Trap from the slide-19/20 visual confusion. Layered addressing actually *abstracts away* physical location — that's the point of Layer 2/3.",
+        "D": "Mismaps the analogy. The mail truck represents Layer 1/2 (the medium that just moves the envelope), not Layer 4. A common error from forcing the analogy too literally."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q04",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "MAC address vs cryptographic MAC",
+      "stem": "A student writes on an exam: \"MAC stands for Message Authentication Code; it provides integrity for Ethernet frames.\" Identify the precise error.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The error is the word \"integrity\"; MAC provides confidentiality, not integrity."
+        },
+        {
+          "id": "B",
+          "text": "There is no error; this is the standard description of Ethernet MAC."
+        },
+        {
+          "id": "C",
+          "text": "The error is the expansion of MAC; in the Ethernet context, MAC stands for Media Access Control, a 6-byte hardware identifier with no cryptographic function."
+        },
+        {
+          "id": "D",
+          "text": "The error is \"Ethernet\"; cryptographic MACs only apply to IP packets, not Ethernet frames."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "The lecture flags this collision explicitly: in networking, MAC = *Media Access Control* (a hardware address). In cryptography, MAC = *Message Authentication Code* (a tag computed under a secret key). The Ethernet MAC address has no key, no integrity property, and is trivially spoofable. Conflating the two acronyms is exactly the kind of mechanism-blind error the professor's \"WHY\" questions are designed to catch.",
+      "distractorAnalysis": {
+        "A": "Plausible misdirection — confidentiality vs integrity is the right distinction in *cryptography* but irrelevant here; the issue is that the wrong \"MAC\" is named entirely.",
+        "B": "\"Standard description\" appeal — the Ethernet MAC is not a Message Authentication Code at all.",
+        "D": "Plausible-sounding but wrong on facts. Cryptographic MACs apply to *any* byte string regardless of layer; the issue is still that this isn't one."
+      },
+      "trapCategories": [
+        "conflation",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q05",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "HTTP encapsulation — which headers rewrite",
+      "stem": "In the HTTP-request walkthrough (slides 34–44), a packet is shown leaving Alice with one Ethernet source/destination MAC pair and arriving on a different network with a *different* MAC source/destination pair, while the IP source/destination remain unchanged. Which property of the OSI model does this fact demonstrate?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Layer 3 (IP) addresses are end-to-end and identify the final destination, while Layer 2 (Ethernet) addresses are hop-by-hop and identify only the next physical neighbor."
+        },
+        {
+          "id": "B",
+          "text": "Layer 2 frames are always corrupted in transit, so MAC addresses must be regenerated by every router for error correction."
+        },
+        {
+          "id": "C",
+          "text": "Routers encrypt MAC addresses for privacy, so the addresses appear different on each network."
+        },
+        {
+          "id": "D",
+          "text": "IPv4 addresses are 32 bits and Ethernet MACs are 48 bits, so the two are incompatible and Ethernet must be replaced at every router."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "This is the central mechanical insight of the entire encapsulation walkthrough. IP addresses (Layer 3) are *global* — the source-to-destination pair stays fixed for the life of the packet. MAC addresses (Layer 2) are *local* — each router strips the incoming Ethernet header and writes a new one for the outgoing link, naming itself as source and the next hop as destination. The slide's note \"MAC addresses changed because the recipient is on a different network\" is highlighting exactly this scope difference.",
+      "distractorAnalysis": {
+        "B": "Absolutist + wrong mechanism. Frames are not \"always\" corrupted; routers rewrite MACs as part of normal forwarding, not error correction.",
+        "C": "Plausible-sounding privacy framing, but completely fabricated — MAC addresses are sent in cleartext at Layer 2.",
+        "D": "Misuse of true facts. IP and MAC sizes differ, but that has nothing to do with hop-by-hop rewriting; it's about scope of addressing."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q06",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "What IP does NOT provide",
+      "stem": "Which of the following does the Internet Protocol (IP) at Layer 3 *NOT* provide on its own?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Routing of packets across multiple networks toward a destination."
+        },
+        {
+          "id": "B",
+          "text": "Globally unique addressing of devices."
+        },
+        {
+          "id": "C",
+          "text": "Reliable, in-order delivery of arbitrary-length data."
+        },
+        {
+          "id": "D",
+          "text": "Detection of random transmission errors via a checksum."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "IP is explicitly best-effort. Packets may be lost, corrupted, or delivered out of order; reassembly of fragments is the recipient's job and ordered byte-stream delivery is *not* IP's concern at all. Reliable, in-order delivery of arbitrary data is the job of TCP at Layer 4, which builds on top of IP precisely because IP doesn't offer it.",
+      "distractorAnalysis": {
+        "A": "IP does provide routing — that's its core service.",
+        "B": "IP addresses are globally unique (from any single perspective), per the lecture.",
+        "D": "IP does include a checksum for random-error detection (just not cryptographic integrity)."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q07",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Encapsulation walkthrough — sending",
+      "stem": "Alice's browser issues `GET / HTTP/1.1`. Order the following operations as they occur on Alice's machine before any bit leaves the wire:\n\n(i) IP header (`From: 1.2.3.4 To: 5.6.7.8`) is added.\n(ii) TCP header (`From: Port 1234 To: Port 80`) is added.\n(iii) Ethernet header with next-hop MAC addresses is added.\n(iv) Bytes are encoded as voltages on the physical medium.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "(i) → (ii) → (iii) → (iv)"
+        },
+        {
+          "id": "B",
+          "text": "(ii) → (i) → (iii) → (iv)"
+        },
+        {
+          "id": "C",
+          "text": "(iii) → (i) → (ii) → (iv)"
+        },
+        {
+          "id": "D",
+          "text": "(iv) → (iii) → (ii) → (i)"
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "On *send*, the message starts at Layer 7 (HTTP) and descends. Each lower layer wraps the layer above it. So TCP wraps the HTTP request first (giving you HTTP+TCP), then IP wraps that (HTTP+TCP+IP), then Ethernet wraps that (HTTP+TCP+IP+Ethernet), then the bits are emitted on the medium. Reverse order on receive.",
+      "distractorAnalysis": {
+        "A": "Reverses TCP and IP. Layer 4 (TCP) is closer to the application than Layer 3 (IP), so TCP is added first when descending.",
+        "C": "Puts Ethernet (Layer 2) before IP (Layer 3) and TCP (Layer 4). That would mean the link layer wrapped the network and transport layers, which inverts the stack.",
+        "D": "Reverses the entire order; this is the *receive* order, not send."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q08",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Scope of MAC vs IP addressing",
+      "stem": "Why is direct MAC-level addressing alone insufficient to identify any device on the Internet, even though MAC addresses are globally unique 48-bit identifiers?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "MAC addresses are not actually unique; manufacturers reuse them across batches."
+        },
+        {
+          "id": "B",
+          "text": "MAC addresses identify network equipment but contain no information that helps a router decide which way to forward a packet across multiple networks."
+        },
+        {
+          "id": "C",
+          "text": "MAC addresses are encrypted at Layer 2, so routers cannot read them."
+        },
+        {
+          "id": "D",
+          "text": "MAC addresses are too short to address all current Internet devices."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "MAC addresses are flat — there is no hierarchical structure that says \"this device is in that network, behind that router.\" Routers need *aggregable, hierarchical* addresses (IP), where prefixes correspond to networks, so they can forward without storing a routing entry per device. MAC is a name; IP is a name *plus* a routing hint.",
+      "distractorAnalysis": {
+        "A": "Factually wrong; MACs are designed to be globally unique (with the manufacturer prefix in the first 3 bytes).",
+        "C": "Fabricated mechanism — Layer 2 has no encryption.",
+        "D": "True at the limit but not the actual reason. Even with 48 bits per device, the absence of *hierarchy* would still kill routing."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q09",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Layer identification of attacks",
+      "stem": "A defender catalogs four threats. Match each to the OSI layer at which the attack primarily operates:\n\n(i) Cross-site scripting (XSS) executes attacker JavaScript in a victim's browser.\n(ii) ARP poisoning convinces a host that the attacker's MAC is the gateway.\n(iii) SYN flooding exhausts a server's connection-state table.\n(iv) RF jamming prevents Wi-Fi frames from being decoded.\n\nWhich mapping is correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "(i) Layer 7, (ii) Layer 2, (iii) Layer 4, (iv) Layer 1."
+        },
+        {
+          "id": "B",
+          "text": "(i) Layer 4, (ii) Layer 3, (iii) Layer 7, (iv) Layer 1."
+        },
+        {
+          "id": "C",
+          "text": "(i) Layer 7, (ii) Layer 3, (iii) Layer 4, (iv) Layer 2."
+        },
+        {
+          "id": "D",
+          "text": "(i) Layer 7, (ii) Layer 2, (iii) Layer 3, (iv) Layer 1."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "XSS is application-layer (browser executes JS in a page) — Layer 7. ARP operates inside the link layer to resolve MAC addresses from IP addresses — Layer 2. SYN flood abuses the TCP three-way handshake's state allocation — Layer 4. RF jamming attacks the physical medium itself — Layer 1.",
+      "distractorAnalysis": {
+        "B": "Pushes XSS down to Layer 4 (XSS has nothing to do with TCP) and ARP up to Layer 3 (ARP straddles 2/3 conceptually but operates at Layer 2 with frames).",
+        "C": "Misplaces ARP at Layer 3 and jamming at Layer 2.",
+        "D": "Misplaces SYN flood at Layer 3; SYN is a *TCP* flag, which lives at Layer 4."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q10",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Mixed-medium routed network",
+      "stem": "The slide-25 diagram shows a packet traveling A → router → router → D, where one labeled link is Wi-Fi and another is Ethernet, with the caption \"the Internet protocol stays the same end to end.\" Which of the following is the *strongest* implication of this fact?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Wi-Fi and Ethernet are interchangeable because they encode bits identically at Layer 1."
+        },
+        {
+          "id": "B",
+          "text": "The choice of physical and link layer technology on each hop is independent of the end-to-end IP protocol; layers below 3 can vary freely along the path while IP semantics persist."
+        },
+        {
+          "id": "C",
+          "text": "The packet is decrypted and re-encrypted at each router as it crosses media."
+        },
+        {
+          "id": "D",
+          "text": "End-to-end IP delivery requires that every router on the path use the same Layer 1 technology."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the central architectural property of IP: it provides a uniform addressing and forwarding semantic *over* heterogeneous lower layers. Each hop can use whatever physical medium and link protocol is available; IP doesn't see those details. The layer below 3 is a swappable implementation, exactly the substitutability principle from Q1 made concrete.",
+      "distractorAnalysis": {
+        "A": "False — Wi-Fi (RF modulation) and Ethernet (voltage on copper) are different at Layer 1. The point is that they don't have to be the same.",
+        "C": "Fabricated mechanism — there is no encryption being applied or removed at routers in the lecture's model.",
+        "D": "Inverts the lesson. End-to-end IP works *because* lower layers can differ."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Checksum vs cryptographic integrity",
+      "stem": "A protocol designer argues that since IP includes a checksum that catches corrupted packets, IP already provides integrity. Why is this argument fundamentally wrong, even though the checksum is mathematically correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The checksum is computed over the entire packet, but the IP header itself is excluded, so any modification to the header is undetectable."
+        },
+        {
+          "id": "B",
+          "text": "The checksum protects against random transmission errors but not against an adversary, because an attacker who modifies the packet simply recomputes the checksum over the modified contents."
+        },
+        {
+          "id": "C",
+          "text": "The checksum can produce collisions, so two valid packets can have the same checksum, and integrity therefore cannot be guaranteed."
+        },
+        {
+          "id": "D",
+          "text": "The checksum is encrypted but the encryption key is public, so anyone can decrypt and re-sign."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the lecture's quiet entry point into cryptography. A checksum is a *non-secret* function of the packet contents; anyone modifying the packet can recompute it. True integrity requires a secret-key construction (a cryptographic MAC or signature) so that *only* the legitimate sender can produce a tag the receiver will accept. Random-error detection ≠ adversarial integrity.",
+      "distractorAnalysis": {
+        "A": "Fabricated detail — IP's header checksum does cover the header in IPv4.",
+        "C": "Collisions exist for any compressing function but are not the issue here. Even a collision-free checksum would still be forgeable because there's no key.",
+        "D": "False mechanism — checksums are not encrypted at all."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q12",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Reliability vs integrity confusion",
+      "stem": "Which of the following statements about TCP and IP is strictly correct?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "TCP provides integrity because it guarantees in-order, reliable delivery of bytes."
+        },
+        {
+          "id": "B",
+          "text": "IP provides integrity because its checksum detects corruption."
+        },
+        {
+          "id": "C",
+          "text": "Neither TCP nor IP provides cryptographic integrity; both are vulnerable to a man-in-the-middle who modifies bytes and recomputes checksums."
+        },
+        {
+          "id": "D",
+          "text": "TCP and IP together provide integrity, but only if the connection is established before tampering occurs."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "\"Reliability\" (TCP) and \"error detection\" (IP) are *non-adversarial* properties — they protect against the network, not against an attacker. A man-in-the-middle can modify any byte and recompute every checksum and TCP field; the receiver will accept the modified data. Cryptographic integrity is added at TLS (Layer 4.5) or higher, not by TCP/IP.",
+      "distractorAnalysis": {
+        "A": "Confuses reliability with integrity — the central trap of the lecture's quiet crypto handoff.",
+        "B": "Same trap, applied to IP's checksum. Detection of *random* errors ≠ integrity.",
+        "D": "Plausible hedge (\"but only if...\") that still implies TCP/IP achieve integrity. They don't, ever."
+      },
+      "trapCategories": [
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q13",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Decapsulation walkthrough — receiving",
+      "stem": "A frame arrives at Bob's NIC. Order the operations as the data ascends Bob's stack until his web server program reads the HTTP request:\n\n(i) The Ethernet header is stripped after the destination MAC matches Bob.\n(ii) The IP header is examined; the destination IP matches Bob, so payload is passed up.\n(iii) The TCP header is examined; the destination port matches the listening web server, payload is delivered to it.\n(iv) The application program parses `GET / HTTP/1.1`.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "(i) → (ii) → (iii) → (iv)"
+        },
+        {
+          "id": "B",
+          "text": "(iv) → (iii) → (ii) → (i)"
+        },
+        {
+          "id": "C",
+          "text": "(i) → (iii) → (ii) → (iv)"
+        },
+        {
+          "id": "D",
+          "text": "(ii) → (i) → (iii) → (iv)"
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Receive order is *bottom-up*: the NIC handles bits → Ethernet (Layer 2) checks destination MAC → IP (Layer 3) checks destination IP → TCP (Layer 4) checks destination port → the application reads the byte stream. Each layer strips its header and hands the inner contents up. The slides 39–43 reverse-walkthrough demonstrates this exactly.",
+      "distractorAnalysis": {
+        "B": "The send order, not receive.",
+        "C": "Skips IP between Ethernet and TCP, which is structurally impossible — IP delivers TCP to the right host.",
+        "D": "Inverts IP and Ethernet — IP cannot be checked before Ethernet has been demultiplexed off the local link."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q14",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Advanced",
+      "topic": "What Layer 2 does NOT provide",
+      "stem": "Which of the following is *NOT* a service provided by Layer 2 (the link layer) on its own?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Direct addressing of one device to another on the same local network."
+        },
+        {
+          "id": "B",
+          "text": "Encoding of messages into frames containing source, destination, and data."
+        },
+        {
+          "id": "C",
+          "text": "Routing of frames across multiple LANs to reach a destination on a different network."
+        },
+        {
+          "id": "D",
+          "text": "Provision of an abstraction in which all devices on a LAN appear directly connected, even when the physical topology is point-to-point."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Routing across multiple LANs is the defining responsibility of Layer 3 (IP). Layer 2 ends at the LAN boundary; routers (Layer 3) bridge LANs. The lecture explicitly contrasts Layer 2's \"all-on-one-wire\" abstraction (within a LAN) with Layer 3's role in extending addressing to *different* networks.",
+      "distractorAnalysis": {
+        "A": "Layer 2 does provide direct LAN-local addressing.",
+        "B": "Frames with source/destination/data are exactly the Layer 2 unit of delivery.",
+        "D": "Layer 2 does abstract a point-to-point topology into a \"shared wire\" addressing model — this is shown in slides 19–20."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q15",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Header visibility under TLS",
+      "stem": "When a browser connects to a server over HTTPS (TLS over TCP over IP), an attacker passively observing traffic on a coffee-shop Wi-Fi network can read which of the following?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The HTTP request body, the destination IP address, and the destination MAC address."
+        },
+        {
+          "id": "B",
+          "text": "Only the destination IP address, because TLS encrypts everything else including TCP and IP headers."
+        },
+        {
+          "id": "C",
+          "text": "The destination IP, source IP, TCP source/destination ports, and Layer 2 MAC addresses, but not the HTTP request body."
+        },
+        {
+          "id": "D",
+          "text": "Nothing; TLS encrypts the entire packet end-to-end."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "TLS encrypts only the application-layer payload (and a thin handshake on top of TCP). The TCP and IP headers, by necessity, must remain readable so routers and the kernel can deliver the packet. The Ethernet headers must be readable by the local switch. The mechanism this question tests is *which layer the encryption sits at* — TLS at ~4.5 protects Layer 7 contents but leaves all addressing headers (Layers 2, 3, and TCP ports) in cleartext.",
+      "distractorAnalysis": {
+        "A": "Implies the HTTP body is readable under TLS — false. TLS encrypts the body.",
+        "B": "Absolutist (\"encrypts everything else including TCP and IP headers\"). Routers couldn't forward the packet if this were true.",
+        "D": "Absolutist and impossible — Layer 2 routers and middle-network devices need readable headers to deliver anything."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q16",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "HTTP encapsulation — field identification",
+      "stem": "Suppose the diagram shows a frame on the wire containing:\n`From: 89:8d:33:25:47:24` / `To: d5:a9:20:68:e0:80`\n`From: 1.2.3.4` / `To: 5.6.7.8`\n`From: Port 1234` / `To: Port 80`\n`GET / HTTP/1.1`\n\nWhich of the following is true about this snapshot?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The MAC pair identifies the original sender and the final recipient; the IP pair identifies the next-hop routers."
+        },
+        {
+          "id": "B",
+          "text": "The MAC pair identifies the current hop's sender and immediate next-hop receiver; the IP pair identifies the original sender and final destination of the packet."
+        },
+        {
+          "id": "C",
+          "text": "Both MAC and IP pairs identify the original sender and final destination; the difference is just notation."
+        },
+        {
+          "id": "D",
+          "text": "The MAC pair is encrypted, while the IP pair is in cleartext."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the inverse of Q5, asked in interpretation form. MACs are hop-by-hop and only meaningful on the current physical link. IPs are end-to-end and unchanged across the path. Reading the headers correctly requires holding both scopes in mind simultaneously — the source MAC is *not* the source of the connection, only the source of *this hop*.",
+      "distractorAnalysis": {
+        "A": "Inverts the scopes — MACs are hop-by-hop, not end-to-end.",
+        "C": "Conflates the two. They are not just different notations; they have different scopes by design.",
+        "D": "Fabricated — neither pair is encrypted at this layer in the slide example."
+      },
+      "trapCategories": [
+        "conflation",
+        "diagram-reading",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q17",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Why ports exist",
+      "stem": "A single server machine with one IP address can simultaneously run a web server on port 80, an SSH daemon on port 22, and a database on port 5432. What mechanism makes this multiplexing possible, and *which layer* implements it?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The IP layer (Layer 3) demultiplexes incoming packets to multiple programs by inspecting the application-layer payload."
+        },
+        {
+          "id": "B",
+          "text": "The transport layer (Layer 4) uses port numbers in the TCP/UDP header to deliver each segment to the correct local program, providing many \"addresses\" per IP."
+        },
+        {
+          "id": "C",
+          "text": "The application layer (Layer 7) listens on the same socket and dispatches based on the URL path."
+        },
+        {
+          "id": "D",
+          "text": "The link layer (Layer 2) assigns separate MAC addresses to each program on the host."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Ports are a Layer 4 abstraction. The OS kernel reads the TCP (or UDP) destination port and delivers the segment to whichever program has bound that port. Without ports, a single IP would limit the host to one application at a time. This is the lecture's two-line definition of the transport layer's *demultiplexing* role.",
+      "distractorAnalysis": {
+        "A": "Wrong layer — IP makes its decision before knowing about the application; it doesn't parse application payload.",
+        "C": "True for HTTP virtual hosting, but doesn't explain how SSH and a database (different protocols on different ports) coexist. The mechanism is more general than URL routing.",
+        "D": "Fabricated — there is exactly one MAC per NIC, regardless of how many programs run."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q18",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "TLS as Layer 4.5",
+      "stem": "The lecture mentions \"Layer 4.5 for encryption.\" Which of the following best explains why TLS is conceptually placed between Layer 4 and Layer 7, rather than at Layer 3 (alongside IP) or Layer 7 (inside HTTP itself)?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "TLS must be placed at Layer 3 because it encrypts IP addresses; the lecture's label is a typo."
+        },
+        {
+          "id": "B",
+          "text": "TLS sits above transport because it needs an ordered, reliable byte stream to encrypt; it sits below the application because it must be reusable across many application protocols (HTTPS, IMAPS, FTPS) without each one reimplementing crypto."
+        },
+        {
+          "id": "C",
+          "text": "TLS is placed at 4.5 because layers 5 and 6 of the OSI model are skipped, leaving an empty slot the protocol fills by historical accident."
+        },
+        {
+          "id": "D",
+          "text": "TLS belongs at Layer 7 because it is implemented in user-space libraries; the \"4.5\" label is purely educational."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The key mechanism: TLS *consumes* a Layer 4 byte stream (it requires reliable in-order delivery, which UDP doesn't supply by default) and *exposes* an encrypted byte stream that any Layer 7 protocol can use. Putting it below applications means HTTP, SMTP, and IMAP all share the same crypto implementation rather than each rolling their own. Putting it above transport means it doesn't have to deal with packets, just bytes.",
+      "distractorAnalysis": {
+        "A": "False — TLS does not encrypt IP addresses; routers couldn't forward if it did.",
+        "C": "Plausible-sounding but wrong reasoning — TLS sits between 4 and 7 because of its functional role, not because slots 5 and 6 happen to be empty.",
+        "D": "Implementation location (user space vs kernel) is orthogonal to layer placement."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q19",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Layer 1 — bit transmission scope",
+      "stem": "Slide 17 shows two devices A and B with the bit string `01110111…01` between them and the caption: \"How do I transmit this sequence of 0's and 1's from A to B?\" Which of the following is the *strict* boundary of what Layer 1 answers, and *not* a question Layer 1 itself solves?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Layer 1 answers how 0s and 1s are turned into voltage, light, or RF signals on a single physical link."
+        },
+        {
+          "id": "B",
+          "text": "Layer 1 decides which device on a shared LAN should receive the message."
+        },
+        {
+          "id": "C",
+          "text": "Layer 1 specifies that radios use 802.11 modulation and copper uses 802.3 voltages."
+        },
+        {
+          "id": "D",
+          "text": "Layer 1 governs how bits are physically encoded across one direct connection."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Layer 1's question is *literally* \"how do I push this bit across this medium?\" Choosing *which* device on a LAN should consume the bits is a Layer 2 problem (frame addressing). The lecture explicitly frames the next question — \"How do we talk to more than one device?\" — as the bridge to Layer 2, indicating Layer 1 itself doesn't address it.",
+      "distractorAnalysis": {
+        "A": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q20",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "MAC filtering as security",
+      "stem": "A network administrator configures a Wi-Fi access point to allow only devices whose MAC addresses appear on a whitelist. They claim this prevents unauthorized access. What is the strongest mechanistic objection to this claim?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "MAC filtering only prevents IPv4 attacks, not IPv6 attacks."
+        },
+        {
+          "id": "B",
+          "text": "MAC addresses are sent in cleartext at Layer 2 and can be trivially spoofed by any attacker who observes a legitimate frame, so the whitelist provides no meaningful authentication."
+        },
+        {
+          "id": "C",
+          "text": "MAC filtering is correct in principle but the whitelist must be encrypted at rest to be effective."
+        },
+        {
+          "id": "D",
+          "text": "MAC filtering cannot work because MAC addresses are never globally unique."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "MAC addresses are not authenticated — there is no key, no signature, no challenge. An attacker passively sniffs frames, reads a permitted MAC, sets their own NIC to that address, and is now \"on the whitelist.\" This is the canonical example of \"Layer 2 trust assumptions are spoofable by anyone within Layer 1 reach.\"",
+      "distractorAnalysis": {
+        "A": "Fabricated — MAC filtering has no relationship to IPv4 vs IPv6.",
+        "C": "Plausible-sounding security hedge that misses the actual vulnerability — even an encrypted whitelist is useless if any attacker can present any MAC.",
+        "D": "False premise — MACs *are* designed to be globally unique. The issue is not uniqueness; it's spoofability."
+      },
+      "trapCategories": [
+        "distractor-focused",
+        "fabricated-detail"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q21",
+      "type": "GAME_WALK",
+      "difficulty": "Trap",
+      "topic": "Tampered encapsulation",
+      "stem": "An attacker on the path between two routers modifies a packet's IP destination address from `5.6.7.8` to `9.9.9.9` and recomputes the IP checksum. Which of the following best describes what happens, and what guarantees were violated?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The packet is silently dropped because the checksum is now invalid."
+        },
+        {
+          "id": "B",
+          "text": "The packet is delivered to `9.9.9.9` as if it were legitimate; Layer 3 has no cryptographic integrity, so the modification is undetectable at the network layer."
+        },
+        {
+          "id": "C",
+          "text": "The packet is delivered to the original destination because routers use a separate authenticated lookup."
+        },
+        {
+          "id": "D",
+          "text": "The packet triggers an ICMP authentication failure that alerts the original sender."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the operational consequence of Q11 and Q12. There is no Layer 3 mechanism that distinguishes a legitimately addressed packet from one redirected by a man-in-the-middle. Recomputing the checksum is trivial — checksums are not keyed. The packet will be forwarded toward `9.9.9.9` like any other IP packet. Higher layers (TLS) detect tampering only when end-to-end crypto is in use.",
+      "distractorAnalysis": {
+        "A": "The checksum *was* recomputed — there's nothing for routers to drop on integrity grounds.",
+        "C": "Fabricated mechanism — there is no authenticated lookup at Layer 3.",
+        "D": "No such ICMP authentication failure exists. ICMP itself has no integrity."
+      },
+      "trapCategories": [
+        "fabricated-detail",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q22",
+      "type": "DIAGRAM",
+      "difficulty": "Trap",
+      "topic": "Software stack analogy",
+      "stem": "Slide 7 shows a vertical stack — `Code You Write → Run-Time Library → System Calls → Device Drivers → Voltage Levels` — bracketed by \"Fully isolated from user programs.\" Why does the professor open the OSI material with this OS-style stack?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "To establish that the OSI model is identical to the OS abstraction stack at every layer."
+        },
+        {
+          "id": "B",
+          "text": "To establish that students already accept layered abstraction in operating systems and to show that networking applies the same idea — each layer relies on services from below and provides services to the layer above, with implementation details hidden across the boundary."
+        },
+        {
+          "id": "C",
+          "text": "To indicate that networking layers run inside device drivers and therefore require kernel modifications."
+        },
+        {
+          "id": "D",
+          "text": "To suggest that user-space programs cannot send network traffic without bypassing the OSI model."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The slide is pedagogical scaffolding. The professor's argument is: you already trust system calls to do their job without knowing how device drivers work; networking layers operate by the same contract. The diagram anchors the *substitutability* property (Q1) by analogy to a structure students already accept.",
+      "distractorAnalysis": {
+        "A": "Absolutist — the analogy is conceptual, not literal. OSI and OS stacks have different layers and different concerns.",
+        "C": "Plausible-sounding kernel claim, but irrelevant to the analogy's purpose.",
+        "D": "Inverts user-space/kernel division. User-space programs send network traffic constantly through standard system call interfaces — the diagram shows exactly that path."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q23",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "Why crypto exists in the stack",
+      "stem": "Tying this lecture to the cryptographic material covered earlier in the course: which of the following is the most accurate one-sentence explanation of *why* the course spent so much time on confidentiality and integrity primitives, framed in terms of the Internet's layer guarantees?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because Layer 1 is unreliable, and crypto is the only way to make bits arrive in the right order."
+        },
+        {
+          "id": "B",
+          "text": "Because the underlying network (IP) provides best-effort delivery and a non-cryptographic checksum, but no confidentiality and no integrity against an active adversary — properties that must be added by higher layers (TLS, application crypto)."
+        },
+        {
+          "id": "C",
+          "text": "Because Layer 4 (TCP) provides confidentiality but not integrity, so MACs are needed to fill the gap."
+        },
+        {
+          "id": "D",
+          "text": "Because all layers provide integrity, but only Layer 7 provides confidentiality."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the synthesis the lecture is quietly setting up. None of the OSI layers below 4.5 give you confidentiality. None give you adversarial integrity. The whole reason the course teaches IND-CPA, MACs, AE, RSA-OAEP, certificates, and DH is that the substrate this lecture describes provides *zero* security against an active attacker — so applications must add it.",
+      "distractorAnalysis": {
+        "A": "Confuses crypto with reliability. Reliability is TCP's job (best effort + retransmission), not crypto's.",
+        "C": "False — TCP provides neither confidentiality nor cryptographic integrity. Reliability ≠ either.",
+        "D": "Absolutist and false. Most layers provide neither."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q24",
+      "type": "APPLICATION",
+      "difficulty": "Trap",
+      "topic": "Firewall capability across layers",
+      "stem": "A \"stateful packet inspection\" firewall examines IP and TCP headers but does *not* decrypt TLS-encrypted application traffic. Which of the following is something the firewall can still enforce, and which is something it provably cannot?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Can enforce: blocking by destination port number. Cannot: blocking based on URL path of an HTTPS request."
+        },
+        {
+          "id": "B",
+          "text": "Can enforce: blocking based on URL path of an HTTPS request. Cannot: blocking by destination port number."
+        },
+        {
+          "id": "C",
+          "text": "Can enforce: blocking based on the contents of the HTTP request body. Cannot: blocking by destination IP."
+        },
+        {
+          "id": "D",
+          "text": "Can enforce: every property of the connection, since TCP and IP are visible."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The firewall sees Layers 3 and 4 — IP addresses and TCP/UDP ports — so it can block by port (e.g., \"deny all outbound port 25\") or by IP. It cannot read the HTTP request line because TLS encrypts the application payload, so the URL path is invisible. This is the practical consequence of Q15's header-visibility analysis.",
+      "distractorAnalysis": {
+        "B": "Inverts capability — URLs inside HTTPS are exactly the thing the firewall *can't* see.",
+        "C": "HTTP request bodies are inside TLS, so unreadable; destination IP is in the IP header and is always readable.",
+        "D": "Absolutist — \"every property\" ignores that TLS hides Layer 7 entirely."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Trap",
+      "topic": "Layer substitution and design tradeoffs",
+      "stem": "In the early 2000s, residential broadband replaced dial-up modems with cable and DSL; in the 2010s, Wi-Fi 6 and 5G replaced earlier wireless standards. Throughout, web browsers and HTTP servers required *no changes* despite these revolutions. Which property of the OSI model is this an empirical demonstration of, and what is the strongest objection to the claim that \"the OSI model is just an abstraction with no real consequence\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It demonstrates Layer 7 redundancy, and the objection is that browsers do change but slowly."
+        },
+        {
+          "id": "B",
+          "text": "It demonstrates layered substitutability: Layers 1 and 2 changed dramatically while higher layers were unaffected, because each layer depends only on the *services* of the layer below, not its implementation. The model has real consequence because it determines which changes are local versus globally disruptive."
+        },
+        {
+          "id": "C",
+          "text": "It demonstrates that layers 5 and 6 are doing all the work, since the visible parts of the stack didn't change."
+        },
+        {
+          "id": "D",
+          "text": "It demonstrates that the OSI model is purely cosmetic, since no actual mechanism is being exercised."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the deepest synthesis question of the set. The principle of layered abstraction has *measurable* historical consequence: massive changes at Layers 1–2 over decades produced essentially zero changes at Layer 7, because the contract between layers is implementation-agnostic. The model isn't a teaching device; it is the design discipline that allowed the Internet to scale and evolve without rewriting every application each time the medium changed.",
+      "distractorAnalysis": {
+        "A": "Plausible hedge (\"browsers do change\") that misses the actual mechanism. Browsers change for application-layer reasons, not because of Layer 1 changes.",
+        "C": "Layers 5 and 6 are explicitly skipped in the lecture's model — they cannot be \"doing the work.\"",
+        "D": "Inverts the conclusion. The objection assumes the model is cosmetic; the historical evidence shows the opposite."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L11-Q26",
+      "type": "DIAGRAM",
+      "difficulty": "Trap",
+      "topic": "Tracking MAC and IP across hops",
+      "stem": "A packet travels Alice → Router R1 → Router R2 → Bob, where Alice's MAC is `aa:aa:aa:00:00:01`, R1's two interfaces are `aa:aa:aa:00:00:02` and `aa:aa:aa:00:00:03`, R2's interfaces are `aa:aa:aa:00:00:04` and `aa:aa:aa:00:00:05`, and Bob's MAC is `aa:aa:aa:00:00:06`. Alice's IP is `1.1.1.1`; Bob's is `9.9.9.9`. On the link from R1 to R2, what does the packet header contain?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Source MAC `aa:aa:aa:00:00:01`, Dest MAC `aa:aa:aa:00:00:06`, Source IP `1.1.1.1`, Dest IP `9.9.9.9`."
+        },
+        {
+          "id": "B",
+          "text": "Source MAC `aa:aa:aa:00:00:03`, Dest MAC `aa:aa:aa:00:00:04`, Source IP `1.1.1.1`, Dest IP `9.9.9.9`."
+        },
+        {
+          "id": "C",
+          "text": "Source MAC `aa:aa:aa:00:00:03`, Dest MAC `aa:aa:aa:00:00:04`, Source IP `aa:aa:aa:00:00:02`, Dest IP `aa:aa:aa:00:00:05`."
+        },
+        {
+          "id": "D",
+          "text": "Source MAC `aa:aa:aa:00:00:01`, Dest MAC `aa:aa:aa:00:00:06`, Source IP and Dest IP rewritten by R1 to point to itself."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The MAC pair on the R1→R2 link must reflect *that link*: source = R1's outgoing interface (`...:03`), destination = R2's incoming interface (`...:04`). The IP pair is end-to-end and never rewrites: source = Alice's IP, destination = Bob's IP. This is the pure mechanical application of the hop-by-hop / end-to-end distinction from Q5 and Q16.",
+      "distractorAnalysis": {
+        "A": "Treats MACs as end-to-end (Alice to Bob), the most common mistake. MACs change at every router.",
+        "C": "Confuses MAC addresses with IP addresses entirely — IPs are never written as MAC notation.",
+        "D": "Rewrites IPs in addition to MACs, which would only happen with NAT (not described in the lecture and not part of the basic model). In the standard OSI walkthrough, IP source and destination are preserved end-to-end."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

@@ -1,0 +1,982 @@
+{
+  "lectureId": "lecture-02-cryptography-intro",
+  "lectureTitle": "Introduction to Cryptography",
+  "lectureNumber": 2,
+  "topics": [
+    "Kerckhoff’s Principle",
+    "Security Goals (Confidentiality vs. Integrity)",
+    "Terminology Pipeline (Slide 13)",
+    "Caesar Cipher and Frequency Analysis",
+    "Enigma's Critical Weakness",
+    "IND-CPA Game Mechanics",
+    "Integrity and Tags",
+    "One-Time Pad Encryption (Slide 53)",
+    "One-Time Pad Correctness",
+    "Perfect Secrecy of OTP",
+    "IND-CPA and Deterministic Encryption",
+    "OTP Key Reuse (Two-Time Pad)",
+    "IND-CPA Enigma Challenge (Slide 27)",
+    "Chosen-Plaintext Attack (CPA) on Substitution Ciphers",
+    "Definition of Cryptography",
+    "Confidentiality Analogy (Slide 11)",
+    "IND-CPA and Semantic Security",
+    "OTP Key Generation",
+    "Substitution Ciphers vs. Caesar Ciphers",
+    "OTP and Integrity",
+    "Roadmaps and Classification (Slides 17/33/49)",
+    "IND-CPA and Randomization",
+    "Adversary Strategy in IND-CPA",
+    "Symmetric Key Model",
+    "History and Evolution of Cryptography"
+  ],
+  "questions": [
+    {
+      "id": "L02-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Kerckhoff’s Principle",
+      "stem": "According to Kerckhoff’s Principle, the security of a cryptosystem must rest solely on the secrecy of the key rather than the secrecy of the algorithm. Mechanistically, why is this approach considered superior to \"security through obscurity\"?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because proprietary, secret algorithms are mathematically impossible to reverse-engineer."
+        },
+        {
+          "id": "B",
+          "text": "Because public algorithms can be vetted by the community to ensure no hidden weaknesses or backdoors exist."
+        },
+        {
+          "id": "C",
+          "text": "Because the key length automatically increases when the algorithm is made public."
+        },
+        {
+          "id": "D",
+          "text": "Because Shannon’s Maxim states that attackers are incapable of understanding complex system details."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The mechanism of public vetting ensures that the widest possible group of experts can attempt to break the system. If the system remains secure under public scrutiny, it provides a rigorous guarantee that the security depends only on the secret key.",
+      "distractorAnalysis": {
+        "A": "**Absolutist Trap** — Reverse-engineering is almost always possible; history (like the Enigma) shows that stolen machines or code reveal the algorithm eventually.",
+        "D": "**Hedged Language Trap** — Shannon’s Maxim actually assumes the attacker *does* know the system; it does not claim they are incapable of understanding it.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "hedged-language",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q02",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Foundational",
+      "topic": "Security Goals (Confidentiality vs. Integrity)",
+      "stem": "In the analogy of \"Locking and Unlocking the Message\" (Slide 11), Alice places a message in a box and locks it with a key. Which property does this specific physical mechanism NOT inherently provide in a cryptographic context?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Prevention of unauthorized reading of the message."
+        },
+        {
+          "id": "B",
+          "text": "A defense against eavesdroppers like Eve."
+        },
+        {
+          "id": "C",
+          "text": "Automatic detection if the message was replaced with a different one by Mallory."
+        },
+        {
+          "id": "D",
+          "text": "Assurance that the plaintext is scrambled before entering the insecure channel."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Locking a box (encryption) provides confidentiality, ensuring Eve cannot read the message. However, encryption alone does not provide integrity; an adversary (Mallory) could replace the entire locked box with another one, or in many digital schemes, modify the ciphertext so it decrypts to a different value without the receiver knowing.",
+      "distractorAnalysis": {
+        "A": "**Definition match** — This is exactly what confidentiality/locking provides.",
+        "B": "**Character match** — Eve is the defined eavesdropper for confidentiality.",
+        "D": "**Mechanism match** — The analogy represents the transformation of plaintext into a \"locked\" (scrambled) form."
+      },
+      "trapCategories": [
+        "character-match",
+        "definition-match",
+        "mechanism-match",
+        "not-provide-test",
+        "not-provide-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Terminology Pipeline (Slide 13)",
+      "stem": "Referencing the cryptographic terminology pipeline diagram: If an adversary intercepts the information moving through the \"Insecure Channel,\" what is the formal name for the data they are viewing?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Plaintext"
+        },
+        {
+          "id": "B",
+          "text": "Key"
+        },
+        {
+          "id": "C",
+          "text": "Ciphertext"
+        },
+        {
+          "id": "D",
+          "text": "Algorithm"
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "As shown in the diagram, the input to the Encryption Algorithm is Plaintext, and the output transmitted over the channel is the Ciphertext.",
+      "distractorAnalysis": {
+        "A": "**Conflation** — Plaintext is the original, unencrypted message before it enters the algorithm.",
+        "B": "**Mechanism Error** — The key is the secret parameter used locally by Alice and Bob; it is not sent over the insecure channel in this model.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "category-error",
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Caesar Cipher and Frequency Analysis",
+      "stem": "The Caesar cipher is considered a weak encryption scheme. Mechanistically, why does a \"Frequency Analysis\" attack allow Eve to break it even if she doesn't know the key $K$?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the key space is too large for modern computers to brute-force."
+        },
+        {
+          "id": "B",
+          "text": "Because the scheme preserves the statistical patterns (like the most common letters E, T, A) of the underlying language."
+        },
+        {
+          "id": "C",
+          "text": "Because the Caesar cipher uses a random one-to-one mapping for every individual character."
+        },
+        {
+          "id": "D",
+          "text": "Because the key $K$ is automatically added to the ciphertext as a header."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The Caesar cipher uses a constant shift for every letter. This means the relative frequency of letters remains identical; if 'E' is the most common letter in English, the character representing 'E' in the ciphertext will still be the most common, allowing for a mapping attack.",
+      "distractorAnalysis": {
+        "A": "**Opposite Fact** — The key space is actually tiny (only 26 possible keys), making brute-force trivial even by hand.",
+        "D": "**False mechanism** — The key is never sent with the message; the attack relies on internal message patterns.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Enigma's Critical Weakness",
+      "stem": "On Slide 27, the professor highlights a significant mechanical weakness of the Enigma machine: \"a letter never maps to itself\". How did Allied cryptographers mechanistically exploit this property to break German communications?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "They assumed the key $K$ was always 0 for the first letter."
+        },
+        {
+          "id": "B",
+          "text": "They used \"cribs\" (known plaintexts like weather reports) and ruled out any rotor setting where a ciphertext letter matched the corresponding plaintext letter."
+        },
+        {
+          "id": "C",
+          "text": "They waited for the Germans to send the same message twice using the same rotor settings."
+        },
+        {
+          "id": "D",
+          "text": "They used the BOMBE machine to encrypt the letter 'A' until it produced 'A'."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Because a letter could never map to itself, cryptographers could take a \"crib\" (expected text like \"HEIL\") and slide it along the ciphertext. If any letter in the crib matched the ciphertext letter at that position, that entire alignment (and the associated rotor settings) could be discarded as impossible.",
+      "distractorAnalysis": {
+        "A": "**Nonsense Trap** — Enigma rotors provided millions of trillions of possible keys; assuming $K=0$ is irrelevant.",
+        "D": "**Logic Error** — If a letter never maps to itself, searching for a setting where 'A' maps to 'A' would be a search for something that never happens.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q06",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "IND-CPA Game Mechanics",
+      "stem": "In the IND-CPA security game (Slides 41-45), the adversary (Eve) submits two messages, $M_0$ and $M_1$, of her choice to the challenger (Alice). Why is it a strict requirement of the game that $M_0$ and $M_1$ must be of equal length?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because modern encryption algorithms like AES only work on messages of exactly 128 bits."
+        },
+        {
+          "id": "B",
+          "text": "Because the One-Time Pad cannot XOR two strings of different lengths."
+        },
+        {
+          "id": "C",
+          "text": "Because cryptographic schemes are generally allowed to leak the length of the message for practicality."
+        },
+        {
+          "id": "D",
+          "text": "Because Eve would win the game by default if she could guess the coin flip $b$."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Hiding the length of a message is computationally expensive and impractical (requiring massive padding). Therefore, standard definitions of confidentiality (like IND-CPA) allow the length to be public. If $M_0$ and $M_1$ were different lengths, Eve could distinguish between them simply by looking at the length of the ciphertext $C$, which would be a \"trivial\" win not related to the strength of the encryption.",
+      "distractorAnalysis": {
+        "A": "**Plausible Misconception** — While block ciphers have fixed block sizes, modes of operation allow them to encrypt arbitrary lengths.",
+        "B": "**Irrelevant** — While true for OTP, the IND-CPA game is a general definition for *all* encryption schemes, not just OTP.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "plausible-misconception",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q07",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Integrity and Tags",
+      "stem": "Slide 15 shows Alice using a key to create a \"tag\" for a message to provide Integrity. Which of the following scenarios would result in Bob's \"Check Tag\" algorithm failing to detect a change?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Mallory intercepts $(M, Tag)$ and replaces $M$ with $M'$, then recomputes a valid $Tag'$ without knowing the secret key."
+        },
+        {
+          "id": "B",
+          "text": "Mallory intercepts $(M, Tag)$ and flips a single bit in the message $M$ before it reaches Bob."
+        },
+        {
+          "id": "C",
+          "text": "Alice sends a different message than she intended, but provides the correct tag for that unintended message."
+        },
+        {
+          "id": "D",
+          "text": "Eve reads the message $M$ but does not alter it or the tag."
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "If the integrity scheme is secure, Mallory should *not* be able to recompute a valid tag without the secret key. The \"Check Tag\" algorithm is specifically designed to fail if $M$ is changed because the tag will no longer match the modified message. Option A describes the *failure* of the integrity goal.",
+      "distractorAnalysis": {
+        "B": "**Detection mechanism** — This is exactly what the tag *is* designed to catch; the check will fail.",
+        "C": "**Definition boundary** — Integrity only guarantees the message wasn't changed *in transit*. It doesn't guarantee the sender's intent or the \"truth\" of the content.",
+        "D": "**Goal Conflation** — Eve reading the message is a breach of confidentiality, not integrity. Bob's integrity check will still pass because nothing was changed."
+      },
+      "trapCategories": [
+        "not-provide-test",
+        "not-provide-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q08",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "One-Time Pad Encryption (Slide 53)",
+      "stem": "In the bitwise XOR diagram for OTP encryption, Alice has:\nKey $K$: `0 1 1 0`  \nPlaintext $M$: `1 0 1 1`  \nWhat is the resulting Ciphertext $C$?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "`1 1 0 1`"
+        },
+        {
+          "id": "B",
+          "text": "`1 1 1 0`"
+        },
+        {
+          "id": "C",
+          "text": "`0 0 1 1`"
+        },
+        {
+          "id": "D",
+          "text": "`1 0 0 1`"
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "XOR rules:  \n$0 \\oplus 1 = 1$  \n$1 \\oplus 0 = 1$  \n$1 \\oplus 1 = 0$  \n$0 \\oplus 1 = 1$  \nResult: `1 1 0 1`.",
+      "distractorAnalysis": {
+        "B": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "One-Time Pad Correctness",
+      "stem": "Slide 57 provides the mathematical proof for OTP correctness: $Dec(K, Enc(K, M)) = M$. Which specific algebraic property of the XOR operator ($\\oplus$) makes this possible?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "$x \\oplus 1 = \\neg x$"
+        },
+        {
+          "id": "B",
+          "text": "$x \\oplus 0 = x$"
+        },
+        {
+          "id": "C",
+          "text": "$x \\oplus x = 0$"
+        },
+        {
+          "id": "D",
+          "text": "$(x \\oplus y) \\oplus z = x \\oplus (y \\oplus z)$"
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "During decryption, we compute $K \\oplus (K \\oplus M)$. Because of the associative property and the fact that any value XORed with itself is zero ($K \\oplus K = 0$), the expression simplifies to $0 \\oplus M$, which equals $M$.",
+      "distractorAnalysis": {
+        "A": "Does not match the mechanism described in the correct-answer explanation.",
+        "B": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q10",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Perfect Secrecy of OTP",
+      "stem": "The professor states that the One-Time Pad is \"perfectly secure\" if the key is randomly chosen for every encryption. Why is this \"perfection\" not sufficient for modern internet security?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the XOR operation is too slow for modern gigabit connections."
+        },
+        {
+          "id": "B",
+          "text": "Because random numbers generated by computers are always predictable."
+        },
+        {
+          "id": "C",
+          "text": "Because the key must be as long as the message, creating a massive key-distribution problem."
+        },
+        {
+          "id": "D",
+          "text": "Because an attacker can use frequency analysis to recover the XOR key."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "For OTP to be secure, the key must be at least as long as the message and used only once. If you have a secure way to send a 1GB key to Bob, you might as well have just sent the 1GB message through that secure channel directly.",
+      "distractorAnalysis": {
+        "A": "**Plausible Misconception** — XOR is actually one of the fastest operations a CPU can perform.",
+        "B": "**Absolutist Trap** — While true randomness is hard, high-quality pseudo-randomness is sufficient for many tasks, but OTP specifically requires *truly* random, non-reused keys to maintain its mathematical \"perfection\".",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q11",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "IND-CPA and Deterministic Encryption",
+      "stem": "Imagine Eve is playing the IND-CPA game against a **deterministic** encryption scheme (where the same plaintext always results in the same ciphertext). Describe Eve's winning strategy.",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Submit two messages $M_0$ and $M_1$ of different lengths to see which one the challenger accepts."
+        },
+        {
+          "id": "B",
+          "text": "Use the \"Learning Phase\" to ask for the encryption of $M_0$. When the challenge ciphertext $C$ arrives, see if $C$ matches the previous result."
+        },
+        {
+          "id": "C",
+          "text": "Brute-force the secret key $K$ until the challenge ciphertext $C$ decrypts to a recognizable English word."
+        },
+        {
+          "id": "D",
+          "text": "XOR the challenge ciphertext with $M_0$ to see if the result is a valid key $K$."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "In the IND-CPA game, Eve is allowed to ask for encryptions of any message. If the scheme is deterministic, she can simply ask for $Enc(K, M_0)$. When Alice sends back $Enc(K, M_b)$, Eve just checks if the bits are identical to what she received in the learning phase. If they are, she knows $b=0$ with 100% certainty.",
+      "distractorAnalysis": {
+        "A": "**Rule Violation** — $M_0$ and $M_1$ must be the same length by the rules of the game.",
+        "D": "**Technique Error** — This only works for the One-Time Pad ($K = C \\oplus M$). It does not work for general encryption algorithms.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q12",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "OTP Key Reuse (Two-Time Pad)",
+      "stem": "Slide 60 asks: \"What if we reuse the same key for different messages? Do we still have IND-CPA?\". If Alice uses the same key $K$ to encrypt $M_1$ and $M_2$ via OTP, what can Eve derive by XORing the two ciphertexts together?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "She derives the secret key $K$."
+        },
+        {
+          "id": "B",
+          "text": "She derives the result of $M_1 \\oplus M_2$."
+        },
+        {
+          "id": "C",
+          "text": "She derives the original Plaintext $M_1$."
+        },
+        {
+          "id": "D",
+          "text": "She derives a new random bitstring that is twice the length of $K$."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "$C_1 = M_1 \\oplus K$  \n$C_2 = M_2 \\oplus K$  \n$C_1 \\oplus C_2 = (M_1 \\oplus K) \\oplus (M_2 \\oplus K)$  \nBecause $K \\oplus K = 0$, the keys cancel out, leaving $M_1 \\oplus M_2$. From this, Eve can use \"crib-dragging\" or linguistic patterns to recover both messages.",
+      "distractorAnalysis": {
+        "A": "**Conflation** — Eve doesn't get the key; she gets the XOR sum of the plaintexts.",
+        "D": "**Nonsense Trap** — The result is the same length as the individual messages.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q13",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "IND-CPA Enigma Challenge (Slide 27)",
+      "stem": "Referencing the diagram showing the attack on Enigma's \"never maps to itself\" property: If Eve sends $M_0 = \\text{\"AAAAA\"}$ and $M_1 = \\text{\"BBBBB\"}$ and receives ciphertext $C = \\text{\"JXQWZ\"}$, how does she know Alice encrypted $M_0$?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because 'J', 'X', 'Q', 'W', and 'Z' are all in the first half of the alphabet."
+        },
+        {
+          "id": "B",
+          "text": "Because none of the letters in $C$ are 'A'."
+        },
+        {
+          "id": "C",
+          "text": "Because none of the letters in $C$ are 'B'."
+        },
+        {
+          "id": "D",
+          "text": "Because the ciphertext has the same length as the plaintexts."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The Enigma weakness is that a letter never maps to itself. If Alice encrypted \"AAAAA\", the ciphertext *could not possibly* contain an 'A'. Conversely, if she encrypted \"BBBBB\", it could not contain a 'B'. In this specific case, $C$ contains no 'A's, which is consistent with $M_0$, whereas if it were $M_1$, it would be impossible for any of those 'B's to map to something other than 'B' every single time by random chance (Statistically, if it contained a 'B', it *must* be $M_0$).",
+      "distractorAnalysis": {
+        "A": "**Irrelevant** — Alphabet position is not part of the Enigma mechanism.",
+        "D": "**Triviality** — All ciphertexts in this game have the same length; it provides no information.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q14",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Chosen-Plaintext Attack (CPA) on Substitution Ciphers",
+      "stem": "Slide 23 discusses chosen-plaintext attacks on substitution ciphers. If Eve tricks Alice into encrypting the string \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\", how many more messages can Alice securely send to Bob using that same mapping?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Unlimited, because the mapping is a random one-to-one function."
+        },
+        {
+          "id": "B",
+          "text": "Zero, because Eve now possesses the entire key $K$ (the mapping) and can decrypt all future ciphertexts."
+        },
+        {
+          "id": "C",
+          "text": "26, because Eve only learned the mapping for those specific 26 characters."
+        },
+        {
+          "id": "D",
+          "text": "It depends on whether Alice uses a One-Time Pad for the next message."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The \"key\" of a substitution cipher is the mapping table itself. By tricking Alice into encrypting the full alphabet, Eve sees exactly what every letter maps to. Since the mapping is fixed (not a one-time pad), the security is entirely compromised.",
+      "distractorAnalysis": {
+        "A": "**Absolutist Trap** — The randomness of the mapping only protects against brute force; it does nothing against a chosen-plaintext attack where the attacker observes the mapping directly.",
+        "D": "**Category Error** — The question is about the Substitution Cipher, not the OTP.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "category-error",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q15",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Definition of Cryptography",
+      "stem": "Modern cryptography is defined as providing \"rigorous guarantees on the security of data and computation in the presence of an attacker\". Which of the following statements would the professor most likely identify as a \"Trap\" or misconception?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "\"Security is a binary state: a system is either perfectly unbreakable or completely useless.\""
+        },
+        {
+          "id": "B",
+          "text": "\"Modern cryptography relies heavily on hard mathematical problems.\""
+        },
+        {
+          "id": "C",
+          "text": "\"Integrity and Authenticity are closely related properties.\""
+        },
+        {
+          "id": "D",
+          "text": "\"Cryptography can provide security guarantees even over insecure communication channels.\""
+        }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The professor emphasizes that security is about \"rigorous guarantees\" and \"provably secure\" systems under specific threat models. Believing in \"unbreakable\" codes (like the Germans did with Enigma) is a classic mistake. Security is about raising the cost of an attack to be computationally infeasible, not theoretically impossible.",
+      "distractorAnalysis": {
+        "B": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q16",
+      "type": "DIAGRAM",
+      "difficulty": "Trap",
+      "topic": "Confidentiality Analogy (Slide 11)",
+      "stem": "In the Confidentiality diagram, Alice uses a \"Key\" to \"Lock Message in locked box.\" If the \"Key\" used to lock the box is different from the \"Key\" used by Bob to unlock it, what model of cryptography is being used?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Symmetric-key model"
+        },
+        {
+          "id": "B",
+          "text": "Asymmetric-key model"
+        },
+        {
+          "id": "C",
+          "text": "One-Time Pad model"
+        },
+        {
+          "id": "D",
+          "text": "Caesar Cipher model"
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "As defined on Slide 9, the Symmetric-key model involves Alice and Bob sharing the *same* secret key. If they use different keys (a public key to lock and a secret key to unlock), it is the Asymmetric-key model (e.g., RSA).",
+      "distractorAnalysis": {
+        "A": "**Definition Mismatch** — Symmetric means \"same key\".",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "category-error",
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q17",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "IND-CPA and Semantic Security",
+      "stem": "Consider the professor's \"Scheme #2\" for a grading system: `Enc(\"pass\")` always starts with `00`, and `Enc(\"fail\")` always starts with `11`. Mechanistically, why does this fail the IND-CPA test?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Because the messages \"pass\" and \"fail\" are different lengths."
+        },
+        {
+          "id": "B",
+          "text": "Because the ciphertext gives the attacker additional information (a \"leak\") that allows them to distinguish the plaintext with probability 1."
+        },
+        {
+          "id": "C",
+          "text": "Because the attacker doesn't know the secret key $K$."
+        },
+        {
+          "id": "D",
+          "text": "Because the scheme uses a public hash function instead of encryption."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The definition of confidentiality/IND-CPA is that the ciphertext should not give the attacker *any* additional information. If Eve sees a ciphertext starting with `00`, she knows with 100% certainty that the grade was \"pass,\" meaning her guessing probability is 1, which is much higher than the required $1/2$ for a secure scheme.",
+      "distractorAnalysis": {
+        "A": "**Misinterpretation** — While they are different lengths, the *primary* failure described in the example is the deterministic prefix `00` or `11`.",
+        "D": "**Category Error** — The example is explicitly about an \"encryption scheme\".",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "category-error"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q18",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "OTP Key Generation",
+      "stem": "According to Slide 56, for One-Time Pads, we must \"generate a new key for every message\". If Alice generates a 128-bit random key $K$ and uses it to encrypt a 64-bit message $M_1$ and then uses the remaining 64 bits to encrypt $M_2$, has she violated the \"One-Time\" rule?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Yes, because the key $K$ was only generated once."
+        },
+        {
+          "id": "B",
+          "text": "No, because no individual bit of the key was used more than once."
+        },
+        {
+          "id": "C",
+          "text": "Yes, because the length of the key must match the total length of all messages ever sent."
+        },
+        {
+          "id": "D",
+          "text": "No, because the key is secret and known only to Alice and Bob."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The critical security mechanism of OTP is that no key *bit* is reused. If Alice has 128 bits of randomness, she can safely encrypt 128 bits of plaintext, whether that is in one message or two 64-bit messages, provided she never uses the same offset of the key twice.",
+      "distractorAnalysis": {
+        "A": "**Logic Error** — The generation frequency doesn't matter; the *usage* frequency of the bits matters.",
+        "D": "**Irrelevant** — Being secret is a requirement for all symmetric crypto, but it doesn't address the \"one-time\" property specifically.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "hedged-language",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q19",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Substitution Ciphers vs. Caesar Ciphers",
+      "stem": "A Substitution Cipher is described as \"better\" than a Caesar Cipher (Slide 22). Mechanistically, what is the primary advantage of a Substitution Cipher?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It is IND-CPA secure."
+        },
+        {
+          "id": "B",
+          "text": "It has a significantly larger key space ($26!$ vs. $26$), making brute-force attacks computationally difficult."
+        },
+        {
+          "id": "C",
+          "text": "It prevents frequency analysis by mapping common letters to random symbols."
+        },
+        {
+          "id": "D",
+          "text": "It provides integrity by using a secret one-to-one mapping."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "As Slide 23 notes, there are $26! \\approx 2^{88}$ possible mappings, which is \"too much for most modern computers\" to brute-force, whereas the Caesar cipher only has 26 possible shifts.",
+      "distractorAnalysis": {
+        "A": "**Absolutist Trap** — No deterministic cipher (like a fixed substitution) is IND-CPA secure.",
+        "D": "**Goal Conflation** — Substitution provides (weak) confidentiality; it does nothing to prevent or detect tampering (integrity).",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q20",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Advanced",
+      "topic": "OTP and Integrity",
+      "stem": "If Alice sends a message $M$ to Bob using a One-Time Pad ($C = M \\oplus K$), and Mallory intercepts $C$ and XORs it with a bitstring $L$ (computing $C' = C \\oplus L$), what will Bob receive when he decrypts $C'$?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Bob will receive a \"Decryption Error\" because the integrity check failed."
+        },
+        {
+          "id": "B",
+          "text": "Bob will receive the original message $M$."
+        },
+        {
+          "id": "C",
+          "text": "Bob will receive the message $M \\oplus L$."
+        },
+        {
+          "id": "D",
+          "text": "Bob will receive a random string of bits that looks like noise."
+        }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "$Dec(K, C \\oplus L) = (M \\oplus K) \\oplus L \\oplus K = M \\oplus L$.  \nThe OTP provides no integrity. An attacker can precisely flip bits in the plaintext by flipping them in the ciphertext, and Bob has no way to know the message was tampered with.",
+      "distractorAnalysis": {
+        "A": "**Misconception** — OTP has no built-in integrity or authentication; it \"blindly\" decrypts whatever it receives.",
+        "B": "**Logic Error** — Changing the ciphertext *must* change the decryption in an XOR-based scheme.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q21",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Roadmaps and Classification (Slides 17/33/49)",
+      "stem": "In the \"Cryptography Roadmap\" tables, where do **Digital Signatures** fall?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "Symmetric-key; Confidentiality"
+        },
+        {
+          "id": "B",
+          "text": "Asymmetric-key; Confidentiality"
+        },
+        {
+          "id": "C",
+          "text": "Symmetric-key; Integrity, Authentication"
+        },
+        {
+          "id": "D",
+          "text": "Asymmetric-key; Integrity, Authentication"
+        }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "Digital signatures (like RSA signatures) are the asymmetric equivalent of MACs; they provide integrity and authenticity using a public/private key pair.",
+      "distractorAnalysis": {
+        "A": "Does not match the mechanism described in the correct-answer explanation.",
+        "B": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "diagram-reading"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q22",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "IND-CPA and Randomization",
+      "stem": "The professor notes that a \"better definition of confidentiality\" is IND-CPA. If an encryption algorithm $Enc(K, M)$ is to be IND-CPA secure, what MUST be true about the output of the algorithm when called twice on the same message $M$?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "The outputs must be identical to ensure Bob can decrypt them."
+        },
+        {
+          "id": "B",
+          "text": "The outputs must be different (probabilistic/randomized) so an attacker cannot correlate them."
+        },
+        {
+          "id": "C",
+          "text": "The outputs must be exactly 128 bits long."
+        },
+        {
+          "id": "D",
+          "text": "The outputs must be XORed with the secret key $K$ a second time."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "To defeat a Chosen-Plaintext Attack (CPA), the scheme must be non-deterministic. If $Enc(K, M)$ always produced the same $C$, the attacker would win the IND-CPA game instantly by comparing the challenge $C$ to a previously requested encryption.",
+      "distractorAnalysis": {
+        "A": "**Conflation** — Correctness (Bob being able to decrypt) does not require identical ciphertexts; Bob just needs an algorithm that can reverse the transformation regardless of the random bits used.",
+        "D": "**Nonsense Trap** — This is a specific step in some algorithms, but not a general requirement for security.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "hedged-language",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q23",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Adversary Strategy in IND-CPA",
+      "stem": "In Step 5 of the IND-CPA game (Slide 45), Eve outputs a guess $b=0$ or $b=1$. If Eve is simply \"randomly guessing,\" what is her probability of winning?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "0"
+        },
+        {
+          "id": "B",
+          "text": "1/2"
+        },
+        {
+          "id": "C",
+          "text": "1"
+        },
+        {
+          "id": "D",
+          "text": "$1/2^{88}$"
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The baseline for security is $1/2$. If Eve can do *any* better than random guessing (probability $> 1/2$), the scheme is considered insecure because the ciphertext has leaked some information.",
+      "distractorAnalysis": {
+        "A": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q24",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Symmetric Key Model",
+      "stem": "Slide 34 states: \"Symmetric-key means Alice and Bob share the same secret key that the attacker doesn’t know\". What is the primary advantage of this model over the asymmetric model?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It allows for easier key distribution over public channels."
+        },
+        {
+          "id": "B",
+          "text": "It is generally much faster and more efficient for encrypting large amounts of data."
+        },
+        {
+          "id": "C",
+          "text": "It does not require any prior contact between Alice and Bob."
+        },
+        {
+          "id": "D",
+          "text": "It is the only model that can provide integrity."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Symmetric algorithms (like AES) are built for speed and high throughput (Slide 36: \">1 Gbps on a standard computer\"). Asymmetric algorithms involve complex number theory and are significantly slower.",
+      "distractorAnalysis": {
+        "A": "Does not match the mechanism described in the correct-answer explanation.",
+        "C": "Does not match the mechanism described in the correct-answer explanation.",
+        "D": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "category-error",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L02-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "History and Evolution of Cryptography",
+      "stem": "Reflecting on the \"Takeaways\" (Slide 31) and the move from Enigma to computers: Why did the invention of the BOMBE and the work of Alan Turing mark a \"paradigm shift\" in cryptography?",
+      "choices": [
+        {
+          "id": "A",
+          "text": "It proved that mechanical systems are inherently more secure than paper-and-pencil systems."
+        },
+        {
+          "id": "B",
+          "text": "It demonstrated that even massive key spaces ($10^{20}$ possibilities) could be defeated through a combination of mechanical brute force and exploiting algorithmic weaknesses."
+        },
+        {
+          "id": "C",
+          "text": "It introduced the concept of the One-Time Pad to the world."
+        },
+        {
+          "id": "D",
+          "text": "It made Kerckhoff's Principle obsolete by proving that secret algorithms are better."
+        }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The Enigma had a massive number of possible keys, but the Allies broke it by using BOMBE to automate the search and by exploiting weaknesses like \"no letter maps to itself\". This showed that key size alone is not a guarantee of security if the mechanism is flawed.",
+      "distractorAnalysis": {
+        "A": "**Logic Flip** — It proved the opposite; mechanical systems could be systematically defeated.",
+        "D": "**Misinterpretation** — It actually *validated* Kerckhoff's Principle: once the Allies stole the machines (the algorithm), the Germans' reliance on \"obscurity\" was their downfall.",
+        "C": "Does not match the mechanism described in the correct-answer explanation."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}
