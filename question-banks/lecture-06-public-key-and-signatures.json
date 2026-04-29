@@ -1,0 +1,541 @@
+{
+  "lectureId": "lecture-06-public-key-and-signatures",
+  "lectureTitle": "Public-Key Encryption and Digital Signatures",
+  "lectureNumber": 6,
+  "topics": [
+    "Public-Key Cryptography Overview",
+    "Public-Key for Confidentiality",
+    "Public-Key MITM",
+    "Public-Key for Integrity",
+    "Public-Key Encryption Definition",
+    "RSA KeyGen",
+    "RSA Encrypt and Decrypt",
+    "RSA Correctness Proof",
+    "RSA Security and Factoring",
+    "RSA Determinism",
+    "OAEP Padding",
+    "OAEP Unpadding",
+    "RSA-OAEP Motivation",
+    "Hybrid Encryption",
+    "Digital Signatures Definition",
+    "Digital Signatures EU-CPA",
+    "RSA Signatures",
+    "Hash-then-Sign"
+  ],
+  "questions": [
+    {
+      "id": "L06-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Public-Key Cryptography Overview",
+      "stem": "Public-key (asymmetric) cryptography uses two distinct keys per party: a public key and a private key. What is the most fundamental architectural advantage over symmetric-key cryptography?",
+      "choices": [
+        {"id": "A", "text": "It is significantly faster than symmetric-key crypto."},
+        {"id": "B", "text": "Alice and Bob no longer need to share a secret key in advance to communicate confidentially."},
+        {"id": "C", "text": "It uses XOR exclusively."},
+        {"id": "D", "text": "It eliminates the need for randomness."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The breakthrough of public-key crypto is that anyone can encrypt to Bob using only his public key. No prior secret needs to have been shared, solving the symmetric key-distribution problem.",
+      "distractorAnalysis": {
+        "A": "**Opposite** — Public-key is much *slower* than symmetric (lots of number theory).",
+        "C": "**False** — Public-key uses modular exponentiation, not XOR.",
+        "D": "**False** — Randomness is essential (e.g., for OAEP padding)."
+      },
+      "trapCategories": [
+        "definition-match",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q02",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Public-Key for Confidentiality",
+      "stem": "Slide 5 shows Alice sending a confidential message to Bob. Which key pair is used for encryption and decryption?",
+      "choices": [
+        {"id": "A", "text": "Encrypt with Alice's private key; decrypt with Bob's public key."},
+        {"id": "B", "text": "Encrypt with Bob's public key; decrypt with Bob's private key."},
+        {"id": "C", "text": "Encrypt with Bob's private key; decrypt with Alice's public key."},
+        {"id": "D", "text": "Encrypt and decrypt both use Bob's public key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "For confidentiality, anyone can encrypt to Bob using his publicly known key, but only Bob — holder of his private key — can decrypt. This matches the diagram on Slide 5.",
+      "distractorAnalysis": {
+        "A": "**Wrong Direction** — That is the *signature* configuration (used for integrity, not confidentiality).",
+        "C": "**Confused** — Bob's private key never leaves Bob.",
+        "D": "**Impossible** — Public-key crypto requires the matching private key to invert."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Public-Key MITM",
+      "stem": "Slide 6 shows Mallory mounting a MITM attack on public-key confidentiality. What does Mallory replace, and what is the result?",
+      "choices": [
+        {"id": "A", "text": "Mallory replaces Bob's public key with her own; Alice unwittingly encrypts to Mallory, who decrypts and re-encrypts to Bob."},
+        {"id": "B", "text": "Mallory replaces Bob's private key with her own."},
+        {"id": "C", "text": "Mallory steals Alice's plaintext directly without modifying any keys."},
+        {"id": "D", "text": "Mallory factors $N$ to recover the private key."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Public-key encryption alone provides confidentiality but not authentication of the public key itself. If Mallory can substitute her own public key in transit, Alice has no way to know — motivating certificates in Lecture 07.",
+      "distractorAnalysis": {
+        "B": "**Impossible** — Bob's private key is never transmitted.",
+        "C": "**Wrong Mechanism** — The attack involves key substitution, not direct theft.",
+        "D": "**Wrong Attack** — Factoring is a long-term cryptographic attack, not the MITM mechanism shown."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q04",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Public-Key for Integrity",
+      "stem": "Slide 7 shows public-key cryptography used for integrity/authentication. Which key configuration is used?",
+      "choices": [
+        {"id": "A", "text": "Sign with Alice's public key; verify with Alice's private key."},
+        {"id": "B", "text": "Sign with Alice's private key; verify with Alice's public key."},
+        {"id": "C", "text": "Sign with Bob's public key; verify with Bob's private key."},
+        {"id": "D", "text": "Sign and verify both use Alice's public key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Only Alice has her private key, so only Alice can produce a valid signature. Anyone with her public key can verify — this is exactly the asymmetric pattern needed for unforgeable, publicly verifiable authenticity.",
+      "distractorAnalysis": {
+        "A": "**Inverted** — Signing requires the private key.",
+        "C": "**Wrong Identity** — Bob's keys are for Bob's authentication, not Alice's.",
+        "D": "**Impossible** — Verification needs the inverse key from signing."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q05",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "RSA KeyGen",
+      "stem": "Walk through RSA KeyGen with $p = 3, q = 7$. Compute $N$ and $\\varphi(N)$, then verify that $e = 5$ is a valid choice.",
+      "choices": [
+        {"id": "A", "text": "$N = 21, \\varphi(N) = 21$, and $e = 5$ is invalid because $\\gcd(5, 21) \\neq 1$."},
+        {"id": "B", "text": "$N = 21, \\varphi(N) = (p-1)(q-1) = 12$, and $e = 5$ is valid because $\\gcd(5, 12) = 1$ and $2 < 5 < 12$."},
+        {"id": "C", "text": "$N = 10, \\varphi(N) = 6$, and $e = 5$ is invalid."},
+        {"id": "D", "text": "$N = 21, \\varphi(N) = 12$, but $e$ must be even."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "$N = pq = 21$. For semiprime $N$, $\\varphi(N) = (p-1)(q-1) = 2 \\cdot 6 = 12$. Requirement: $e$ is coprime to $\\varphi(N)$ and $2 < e < \\varphi(N)$. $\\gcd(5, 12) = 1$ ✓ and $2 < 5 < 12$ ✓.",
+      "distractorAnalysis": {
+        "A": "**Formula Error** — Used $N$ instead of $\\varphi(N)$.",
+        "C": "**Arithmetic Error** — Computed addition instead of multiplication.",
+        "D": "**False Constraint** — $e$ must be coprime to $\\varphi(N)$, not necessarily even (and small odd primes like 65537 are common)."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q06",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "RSA Encrypt and Decrypt",
+      "stem": "Continuing with $N = 21, e = 5, d = 5$, encrypt $M = 12$ then decrypt the result.",
+      "choices": [
+        {"id": "A", "text": "$C = 12 \\cdot 5 \\bmod 21 = 18$; decryption gives $M = 18 \\cdot 5 \\bmod 21 = 6$."},
+        {"id": "B", "text": "$C = 12^5 \\bmod 21 = 3$; decryption gives $M = 3^5 \\bmod 21 = 243 \\bmod 21 = 12$."},
+        {"id": "C", "text": "$C = 12^5 \\bmod 21 = 3$; decryption gives $M = 3 \\cdot 5 \\bmod 21 = 15$."},
+        {"id": "D", "text": "$C = 12 \\bmod 21 = 12$; decryption gives $M = 12$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "RSA encryption: $C = M^e \\bmod N = 12^5 \\bmod 21$. $12^5 = 248{,}832$, and $248{,}832 \\bmod 21 = 3$. RSA decryption: $M = C^d \\bmod N = 3^5 \\bmod 21 = 243 \\bmod 21 = 12$ ✓.",
+      "distractorAnalysis": {
+        "A": "**Wrong Operation** — RSA uses exponentiation, not multiplication.",
+        "C": "**Mixed Operation** — Encryption used $M^e$ correctly; decryption must also use exponentiation.",
+        "D": "**No-op** — Skipping both operations is not RSA."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q07",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "RSA Correctness Proof",
+      "stem": "RSA correctness relies on $M^{ed} \\equiv M \\bmod N$. Which theorem provides the key step in the proof?",
+      "choices": [
+        {"id": "A", "text": "Pythagorean theorem."},
+        {"id": "B", "text": "Euler's theorem: $a^{\\varphi(N)} \\equiv 1 \\bmod N$ for $\\gcd(a, N) = 1$."},
+        {"id": "C", "text": "Fundamental theorem of arithmetic."},
+        {"id": "D", "text": "Bayes' theorem."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Because $ed \\equiv 1 \\bmod \\varphi(N)$, we have $ed = k\\varphi(N) + 1$. Then $M^{ed} = M^{k\\varphi(N) + 1} = (M^{\\varphi(N)})^k \\cdot M \\equiv 1^k \\cdot M = M \\bmod N$ — using Euler's theorem.",
+      "distractorAnalysis": {
+        "A": "**Wrong Branch** — That's geometry, not number theory.",
+        "C": "**Wrong Application** — Unique factorization is needed for security analysis, not the correctness proof.",
+        "D": "**Wrong Branch** — Probability theorem, irrelevant here."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q08",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "RSA Security and Factoring",
+      "stem": "Slide 17 says RSA security is \"no harder than the factoring problem.\" What does this technical phrase mean?",
+      "choices": [
+        {"id": "A", "text": "RSA and factoring are provably equivalent."},
+        {"id": "B", "text": "Anyone who can factor $N$ can break RSA (by recovering $d$), so RSA is at most as hard as factoring; whether it is *strictly* easier remains an open problem."},
+        {"id": "C", "text": "RSA is harder than factoring."},
+        {"id": "D", "text": "RSA does not depend on factoring at all."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "If you factor $N$ into $p, q$, you can compute $\\varphi(N) = (p-1)(q-1)$ and recover $d = e^{-1} \\bmod \\varphi(N)$. So an efficient factoring algorithm breaks RSA. The reverse implication — that breaking RSA gives a factoring algorithm — is unproven.",
+      "distractorAnalysis": {
+        "A": "**Overstatement** — Equivalence is not established.",
+        "C": "**Wrong Direction** — Breaking RSA is at most as hard, not harder, than factoring.",
+        "D": "**False** — Factoring $N$ is the canonical RSA attack."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q09",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "RSA Determinism",
+      "stem": "Which property does plain (unpadded) RSA encryption NOT provide?",
+      "choices": [
+        {"id": "A", "text": "Correct decryption when keys are well-formed."},
+        {"id": "B", "text": "IND-CPA security, because RSA is deterministic — encrypting the same $M$ twice yields the same $C$."},
+        {"id": "C", "text": "A relationship between $e$ and $d$ via $\\varphi(N)$."},
+        {"id": "D", "text": "The ability to encrypt with the public key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Plain RSA's determinism breaks IND-CPA the same way that any deterministic encryption scheme does — Eve can re-encrypt $M_0$ and compare. OAEP adds randomness to fix this.",
+      "distractorAnalysis": {
+        "A": "**Provided** — Correctness is guaranteed by Euler's theorem.",
+        "C": "**Provided** — That is the math of KeyGen.",
+        "D": "**Provided** — Anyone can encrypt with the public key."
+      },
+      "trapCategories": [
+        "category-error",
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q10",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "OAEP Padding",
+      "stem": "In the OAEP padding diagram (Slide 20), the inputs are $m$ (plaintext), $00...0$ ($k_1$ zeros), and a random $r$ ($k_0$ bits). Two hashes $G$ and $H$ are applied. The outputs are $X$ and $Y$ where $X = (m \\| 00...0) \\oplus G(r)$ and $Y = r \\oplus H(X)$. Why is the random $r$ added?",
+      "choices": [
+        {"id": "A", "text": "To make the output longer than the input."},
+        {"id": "B", "text": "To inject randomness into the input that RSA encrypts, defeating RSA's determinism and giving the construction IND-CPA security."},
+        {"id": "C", "text": "To act as a MAC for integrity."},
+        {"id": "D", "text": "To increase the modulus $N$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "OAEP's job is to randomize the plaintext before RSA encryption. Without $r$, identical messages would still produce identical ciphertexts. With fresh $r$ per encryption, the actual RSA input $X \\| Y$ is randomized, achieving IND-CPA.",
+      "distractorAnalysis": {
+        "A": "**Misframed** — Length isn't the goal.",
+        "C": "**Wrong Property** — OAEP is about confidentiality, not integrity.",
+        "D": "**Irrelevant** — $N$ is fixed by KeyGen."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "OAEP Unpadding",
+      "stem": "OAEP unpadding (Slide 21) recovers $r = Y \\oplus H(X)$, then $M \\| 00...0 = X \\oplus G(r)$, and verifies the trailing $k_1$ zeros. What does the zero-check guarantee?",
+      "choices": [
+        {"id": "A", "text": "It compresses the message."},
+        {"id": "B", "text": "It detects tampering: if any attacker modified the ciphertext, the decryption produces random-looking bits where the zeros should be, and the unpadder rejects."},
+        {"id": "C", "text": "It adjusts the key length dynamically."},
+        {"id": "D", "text": "It ensures the message ends in zero by design."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The fixed $k_1$-zero pattern is a structural marker. After Feistel-style XOR recovery, an attacker-tampered ciphertext is overwhelmingly likely to produce non-zero bits there, so the unpadder rejects with high probability — providing tamper-detection.",
+      "distractorAnalysis": {
+        "A": "**Wrong Concept** — OAEP doesn't compress.",
+        "C": "**Wrong Mechanism** — Key length is fixed.",
+        "D": "**Reversed** — The check exists to detect tampering, not to enforce a message format."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "RSA-OAEP Motivation",
+      "stem": "Why must we use RSA-OAEP rather than \"plain RSA\" in practice?",
+      "choices": [
+        {"id": "A", "text": "Plain RSA is too slow for modern hardware."},
+        {"id": "B", "text": "Plain RSA is deterministic and only secure for encrypting truly random plaintexts; OAEP adds the randomness and structure needed for IND-CPA security and tamper-detection."},
+        {"id": "C", "text": "Plain RSA leaks the modulus $N$."},
+        {"id": "D", "text": "OAEP is required by the standard for key exchange."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Plain RSA fails IND-CPA because of determinism. OAEP randomizes inputs (achieving IND-CPA) and adds the zero-pad marker (enabling tamper detection during decryption).",
+      "distractorAnalysis": {
+        "A": "**Wrong Driver** — Speed isn't the security argument.",
+        "C": "**False** — $N$ is public anyway.",
+        "D": "**Confused** — OAEP is for encryption padding, not key exchange."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Hybrid Encryption",
+      "stem": "Hybrid encryption combines public-key and symmetric-key crypto. What is the precise role of each?",
+      "choices": [
+        {"id": "A", "text": "Symmetric-key crypto encrypts the message $M$ under a fresh random key $K$; public-key crypto encrypts $K$ under the recipient's public key."},
+        {"id": "B", "text": "Public-key crypto encrypts $M$; symmetric-key crypto signs the result."},
+        {"id": "C", "text": "Both schemes encrypt the same $M$ for redundancy."},
+        {"id": "D", "text": "Symmetric-key signs the message; public-key verifies the signature."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Asymmetric crypto is slow and limited to small messages. Hybrid encryption uses fast symmetric encryption for the bulk data and uses asymmetric encryption only on the small symmetric key. Almost all real-world systems (TLS, PGP, S/MIME) use this pattern.",
+      "distractorAnalysis": {
+        "B": "**Wrong Roles** — Symmetric crypto doesn't sign; signatures are asymmetric.",
+        "C": "**Wasteful** — Double encryption isn't the design.",
+        "D": "**Wrong Direction** — Signing requires the signer's private key, not symmetric crypto."
+      },
+      "trapCategories": [
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q14",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Digital Signatures Definition",
+      "stem": "Digital signatures have three operations: $\\text{KeyGen}, \\text{Sign}, \\text{Verify}$. What is the security goal?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality of the message."},
+        {"id": "B", "text": "Existential unforgeability under chosen-plaintext attack (EU-CPA): without the signing key, an attacker cannot produce a valid signature on any new message."},
+        {"id": "C", "text": "Reversibility of the signature into the message."},
+        {"id": "D", "text": "Forward secrecy of past signatures."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 30 explicitly says the security definition for signatures is EU-CPA, the asymmetric analog of MAC unforgeability. Confidentiality is not a signature goal.",
+      "distractorAnalysis": {
+        "A": "**Wrong Goal** — Signatures provide integrity/authenticity, not confidentiality.",
+        "C": "**Wrong** — Signatures are not invertible into the message.",
+        "D": "**Different Property** — Forward secrecy is a key-management property of key exchange, not signatures."
+      },
+      "trapCategories": [
+        "category-error",
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q15",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "RSA Signatures",
+      "stem": "RSA signatures use the same KeyGen as RSA encryption, but the operations are flipped. The signing operation is $\\text{Sign}(d, M) = H(M)^d \\bmod N$. Why does verification use $\\text{Verify}(e, N, M, sig) = (sig^e \\equiv H(M))$?",
+      "choices": [
+        {"id": "A", "text": "Because $e$ and $d$ are inverses modulo $\\varphi(N)$, so $(H(M)^d)^e = H(M)^{ed} \\equiv H(M) \\bmod N$ — the same correctness identity as RSA encryption."},
+        {"id": "B", "text": "Because $e$ is a hash function."},
+        {"id": "C", "text": "Because verification computes a new signature from scratch."},
+        {"id": "D", "text": "Because $sig^e$ recovers the entire message $M$."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "RSA's correctness identity $M^{ed} \\equiv M \\bmod N$ is symmetric in $e$ and $d$. Signing with $d$ and verifying with $e$ recovers $H(M)$, which the verifier compares to a freshly computed $H(M)$.",
+      "distractorAnalysis": {
+        "B": "**Confused** — $e$ is an exponent, not a hash.",
+        "C": "**Wrong** — Verification recovers the hash and compares; it doesn't reproduce the signature.",
+        "D": "**Wrong** — The signature recovers $H(M)$, not $M$ (which is why we need to send $M$ alongside)."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Hash-then-Sign",
+      "stem": "Slide 31 says practical RSA signatures hash $M$ first and then sign $H(M)$. What two practical problems does the hash solve?",
+      "choices": [
+        {"id": "A", "text": "It compresses the message and adds confidentiality."},
+        {"id": "B", "text": "It allows signing arbitrarily long messages (RSA's modulus bounds direct input size) and ensures the signed value depends on the entire message in a tamper-evident way."},
+        {"id": "C", "text": "It speeds up factoring of $N$."},
+        {"id": "D", "text": "It eliminates the need for a private key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "RSA can only sign values smaller than $N$. Hashing first lets you sign any-length message via its fixed-length digest. Collision resistance ensures Mallory cannot find a different $M'$ with the same hash to substitute under the same signature.",
+      "distractorAnalysis": {
+        "A": "**Wrong Property** — Hashes don't provide confidentiality.",
+        "C": "**Wrong Direction** — Factoring is unrelated to hashing.",
+        "D": "**Critical Misconception** — Signing always requires the private key."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q17",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "RSA Signatures",
+      "stem": "If a developer signs $M$ directly (not $H(M)$) using RSA, what specific attack becomes feasible?",
+      "choices": [
+        {"id": "A", "text": "An attacker can choose two messages $M_1, M_2$ and construct a third message $M_3 = M_1 \\cdot M_2 \\bmod N$ whose signature is the product of the individual signatures, exploiting RSA's multiplicative homomorphism to forge signatures."},
+        {"id": "B", "text": "An attacker can recover the modulus $N$ from the signature."},
+        {"id": "C", "text": "An attacker can crash the verification routine."},
+        {"id": "D", "text": "Nothing changes; signing $M$ directly is equally secure."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Plain RSA satisfies $\\text{Sign}(M_1) \\cdot \\text{Sign}(M_2) = (M_1^d)(M_2^d) = (M_1 M_2)^d = \\text{Sign}(M_1 M_2) \\bmod N$. Hashing first destroys this multiplicative structure because $H(M_1 M_2) \\neq H(M_1) \\cdot H(M_2)$.",
+      "distractorAnalysis": {
+        "B": "**Wrong** — $N$ is public anyway.",
+        "C": "**Made-up** — Verification is straightforward arithmetic.",
+        "D": "**False** — Practical attacks (existential forgery via multiplicativity) exist on unhashed RSA signatures."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q18",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Hybrid Encryption",
+      "stem": "Combining hybrid encryption and digital signatures, how would Alice send a confidential, authenticated message to Bob (assuming both have certified key pairs)?",
+      "choices": [
+        {"id": "A", "text": "Generate a fresh symmetric key $K$. Encrypt $M$ with $K$ using AES-GCM. Encrypt $K$ with Bob's public key (RSA-OAEP). Sign the resulting bundle with Alice's private key (RSA-PSS or hash-then-sign). Send all three pieces to Bob."},
+        {"id": "B", "text": "Encrypt $M$ with Alice's private key and Bob's public key in sequence."},
+        {"id": "C", "text": "Sign $M$ then encrypt the signature with Bob's public key only."},
+        {"id": "D", "text": "Use Diffie-Hellman to derive $K$ and skip signatures entirely."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Real-world systems combine: symmetric AEAD for the message body, asymmetric encryption for the symmetric key, and digital signatures for authenticity. Each primitive does what it's good at.",
+      "distractorAnalysis": {
+        "B": "**Confused** — That's not a standard construction; mixing keys this way doesn't achieve clean security goals.",
+        "C": "**Half** — Misses confidentiality of the message body.",
+        "D": "**Misses Authentication** — DH alone is MITM-vulnerable; signatures are still needed."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q19",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Hybrid Encryption",
+      "stem": "In the hybrid encryption diagram (Slide 25), Alice generates $K$, computes $C_1 = \\text{Enc}_{\\text{sym}}(K, M)$ and $C_2 = \\text{Enc}_{\\text{asym}}(\\text{pub}_B, K)$, then sends both. What does Bob do?",
+      "choices": [
+        {"id": "A", "text": "Decrypt $C_2$ with his public key, then $C_1$."},
+        {"id": "B", "text": "Decrypt $C_2$ with his private key to recover $K$, then decrypt $C_1$ with $K$ using symmetric decryption to recover $M$."},
+        {"id": "C", "text": "Decrypt $C_1$ first, then $C_2$."},
+        {"id": "D", "text": "Verify $C_2$ as a signature and discard $C_1$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Two-step decryption: asymmetric first to unlock the symmetric key, then symmetric to unlock the message. The order matters because $K$ is needed before $C_1$ can be processed.",
+      "distractorAnalysis": {
+        "A": "**Wrong Key** — Decryption requires Bob's *private* key, not his public key.",
+        "C": "**Wrong Order** — $C_1$ requires $K$, which lives inside $C_2$.",
+        "D": "**Confused** — $C_2$ is an encrypted key, not a signature."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L06-Q20",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Public-Key MITM",
+      "stem": "Public-key encryption alone (without certificates or other identity binding) does NOT provide which property?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality assuming the correct public key is used."},
+        {"id": "B", "text": "Decryption by the holder of the private key."},
+        {"id": "C", "text": "Authentication that the public key actually belongs to the intended recipient (vulnerable to MITM key substitution)."},
+        {"id": "D", "text": "Mathematical correctness of encrypt/decrypt."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Slide 6 demonstrates that without a way to bind a public key to an identity, Mallory can substitute her own public key in transit. Confidentiality holds *given* the right key — but you cannot verify you have the right key without certificates (Lecture 07).",
+      "distractorAnalysis": {
+        "A": "**Provided** — Conditional on correct key usage.",
+        "B": "**Provided** — That is the inverse-key property.",
+        "D": "**Provided** — Euler's theorem guarantees correctness."
+      },
+      "trapCategories": [
+        "category-error",
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

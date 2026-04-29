@@ -1,0 +1,606 @@
+{
+  "lectureId": "lecture-17-x86-and-call-stack",
+  "lectureTitle": "x86 Assembly & Call Stack",
+  "lectureNumber": 17,
+  "topics": [
+    "Bits, bytes, words, hex",
+    "CALL pipeline — Compiler, Assembler, Linker, Loader",
+    "C memory layout — code/data/heap/stack",
+    "Stack vs heap growth direction",
+    "Registers vs memory",
+    "x86 fact sheet — little-endian, variable-length",
+    "x86 general-purpose registers",
+    "x86 syntax — %, $, parentheses",
+    "Operand order — destination last",
+    "Memory operands — n(%reg)",
+    "Stack frames — EBP, ESP",
+    "push and pop semantics",
+    "Stack frame layout — locals, struct fields, globals",
+    "x86 calling convention — args on stack, EAX return",
+    "Caller-saved vs callee-saved",
+    "11-step function call sequence",
+    "call instruction — push EIP, jump",
+    "Function prologue — push %ebp; mov %esp, %ebp; sub $n, %esp",
+    "Function epilogue — leave; ret",
+    "Argument cleanup by caller",
+    "EBP points to old EBP — frame chain",
+    "RIP and SFP terminology"
+  ],
+  "questions": [
+    {
+      "id": "L17-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Bits, bytes, words, hex",
+      "stem": "On 32-bit x86, what is one 'word' equal to, and why does this matter for stack diagrams?",
+      "choices": [
+        { "id": "A", "text": "1 byte = 8 bits, the same as a byte." },
+        { "id": "B", "text": "4 bytes = 32 bits — the natural unit of memory the CPU manipulates as one register-sized value, which is why stack diagrams typically use 4-byte rows." },
+        { "id": "C", "text": "8 bytes = 64 bits, the same as on 64-bit systems." },
+        { "id": "D", "text": "Word size depends on the operating system." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "On 32-bit x86, a word is 4 bytes (32 bits). Registers like EAX, EBP, ESP, EIP are each 1 word. Stack diagrams use 4-byte rows because every push/pop moves ESP by exactly one word, and addresses, arguments, saved RIP, and saved SFP are each one word. The class explicitly assumes 32-bit systems for all walkthroughs.",
+      "distractorAnalysis": {
+        "A": "A byte is 8 bits; a word is 4 bytes.",
+        "C": "On 64-bit x86 the word is 8 bytes; on 32-bit it's 4.",
+        "D": "Word size is set by the architecture, not the OS."
+      },
+      "trapCategories": ["definition-test", "32-bit-assumption"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "CALL pipeline — Compiler, Assembler, Linker, Loader",
+      "stem": "In the CALL pipeline, which tool's job is to set up the program's memory space and start it executing?",
+      "choices": [
+        { "id": "A", "text": "Compiler" },
+        { "id": "B", "text": "Assembler" },
+        { "id": "C", "text": "Linker" },
+        { "id": "D", "text": "Loader" }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "Compiler: C → assembly. Assembler: assembly → machine code. Linker: resolves library/dependency references and produces an executable. Loader: at runtime, asks the OS for memory, places the executable's segments in memory, and transfers control to the entry point. The loader is the runtime piece; the others are build-time.",
+      "distractorAnalysis": {
+        "A": "Compiler converts source to assembly.",
+        "B": "Assembler converts assembly to machine bytes.",
+        "C": "Linker resolves dependencies and produces the executable file."
+      },
+      "trapCategories": ["definition-test", "pipeline-stages"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q03",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "C memory layout — code/data/heap/stack",
+      "stem": "On the standard 32-bit x86 process memory layout, ordering from lower to higher addresses, which sequence is correct?",
+      "choices": [
+        { "id": "A", "text": "Stack → Heap → Data → Code (low to high)." },
+        { "id": "B", "text": "Code → Data → Heap → Stack (low to high)." },
+        { "id": "C", "text": "Heap → Code → Data → Stack (low to high)." },
+        { "id": "D", "text": "Code → Stack → Heap → Data (low to high)." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "From low addresses upward: Code, Data (statics), Heap (grows up via malloc), then a gap, then Stack (grows down from high addresses). The slide explicitly shows this ordering with arrows: heap grows upward, stack grows downward, the two approach each other.",
+      "distractorAnalysis": {
+        "A": "Reverses the order.",
+        "C": "Heap is between data and stack, not at the bottom.",
+        "D": "Stack is at the top, not below heap."
+      },
+      "trapCategories": ["diagram-read", "memory-layout"],
+      "diagramRef": "lecture-17-memory-layout",
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Stack vs heap growth direction",
+      "stem": "Why does the stack grow toward lower addresses while the heap grows toward higher addresses on x86?",
+      "choices": [
+        { "id": "A", "text": "Stack growth direction is mandated by the C standard." },
+        { "id": "B", "text": "Convention dating from early architectures, but the practical reason is that placing them at opposite ends of the address space lets each grow toward the other without needing to predict their final sizes — they share the available space dynamically. The CPU's `push` decrements ESP, baking the direction into hardware." },
+        { "id": "C", "text": "The heap must grow downward and the stack upward." },
+        { "id": "D", "text": "Both grow upward; the diagrams are misleading." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Two-ends-toward-middle is a memory-economy choice: neither region needs a preset size; they're each free to expand as long as they don't collide. On x86 specifically, the `push` instruction decrements ESP — stack growth is downward by hardware definition. The heap grows upward as `brk`/`sbrk` (or `malloc`) extend the heap segment.",
+      "distractorAnalysis": {
+        "A": "C standard doesn't mandate this.",
+        "C": "Backwards — the lecture explicitly states stack grows down, heap grows up.",
+        "D": "Diagrams are correct."
+      },
+      "trapCategories": ["mechanism-test", "memory-economy"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Registers vs memory",
+      "stem": "What is the key distinction between an x86 register like %eax and a memory address?",
+      "choices": [
+        { "id": "A", "text": "Registers are slower than memory." },
+        { "id": "B", "text": "Registers live on the CPU itself and are referred to by name (EAX, EBP, ESP, EIP), not by memory address. Memory has 32-bit addresses and exists in RAM. Both are 32 bits in 32-bit x86, but they are physically and logically distinct." },
+        { "id": "C", "text": "Registers and memory are interchangeable terms for the same thing." },
+        { "id": "D", "text": "Registers have variable size; memory has fixed size." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Registers are CPU storage cells with names; memory is RAM addressed by 32-bit numbers. The lecture is explicit: 'Registers are referred to by names, not addresses.' Both happen to be 32 bits on 32-bit x86, but registers live on-die (fast, few) while memory is off-die (slower, vast).",
+      "distractorAnalysis": {
+        "A": "Registers are dramatically faster than RAM.",
+        "C": "Different storage tiers.",
+        "D": "x86 GP registers are fixed-width; memory addressing is fixed-width too."
+      },
+      "trapCategories": ["definition-test", "cpu-vs-memory"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q06",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "x86 fact sheet — little-endian, variable-length",
+      "stem": "Two of x86's defining traits are 'little-endian' and 'variable-length instructions.' Which best summarizes their security-relevant consequences?",
+      "choices": [
+        { "id": "A", "text": "Both make x86 faster than RISC-V." },
+        { "id": "B", "text": "Little-endian: when an attacker writes a 32-bit address into memory, they must order the bytes low-byte-first (e.g., 0xdeadbeef → `\\xef\\xbe\\xad\\xde`). Variable-length (1–16 byte) instructions: the same byte sequence can decode differently depending on where execution starts, enabling techniques like return-oriented programming where attackers find useful 'gadgets' in unintended instruction-stream offsets." },
+        { "id": "C", "text": "Both make x86 immune to buffer overflows." },
+        { "id": "D", "text": "Both are deprecated in modern x86." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Little-endian dictates how attackers serialize addresses for stack overwrites (low byte at lowest address). Variable-length instructions create the unaligned-decoding property that ROP exploits — an attacker can find 'gadgets' (short useful instruction sequences ending in `ret`) embedded *inside* longer legitimate instructions. RISC-V's fixed 4-byte instructions don't allow this trick.",
+      "distractorAnalysis": {
+        "A": "Speed isn't the security-relevant consequence.",
+        "C": "Both arguably make some attacks easier, not harder.",
+        "D": "Still core to x86."
+      },
+      "trapCategories": ["mechanism-test", "endianness", "rop-gadgets"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q07",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "x86 general-purpose registers",
+      "stem": "Which two registers have a special role in stack-frame management on x86?",
+      "choices": [
+        { "id": "A", "text": "EAX and EBX" },
+        { "id": "B", "text": "EBP (base pointer — top of current stack frame) and ESP (stack pointer — bottom of current stack frame)" },
+        { "id": "C", "text": "ECX and EDX" },
+        { "id": "D", "text": "ESI and EDI" }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "EBP delineates the top (highest address) of the current stack frame; ESP delineates the bottom (lowest address). Both move during function calls — call/prologue lower them; epilogue/ret raise them. EIP (instruction pointer) is the third special register but isn't a stack-frame delimiter.",
+      "distractorAnalysis": {
+        "A": "EAX is the return-value register; EBX is general-purpose.",
+        "C": "Both general-purpose.",
+        "D": "Both general-purpose."
+      },
+      "trapCategories": ["register-identification"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q08",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "x86 syntax — %, $, parentheses",
+      "stem": "What does the x86 instruction `xorl 4(%esi), %eax` do?",
+      "choices": [
+        { "id": "A", "text": "Reads the 4-byte value from memory at address `%esi + 4`, XORs it with EAX, and stores the result back into EAX." },
+        { "id": "B", "text": "Loads the immediate value 4 into ESI and XORs ESI with EAX." },
+        { "id": "C", "text": "Stores EAX into memory at address `%esi + 4`." },
+        { "id": "D", "text": "XORs the address `%esi` with the literal 4 and stores in EAX." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "AT&T syntax: `4(%esi)` is a memory operand — dereference at `%esi + 4`. `xorl src, dst` reads source, XORs with destination, writes result back to destination. So this fetches `*(esi+4)`, XORs with EAX, writes back to EAX. The destination is always the last operand in AT&T syntax.",
+      "distractorAnalysis": {
+        "B": "An immediate value would be `$4`, not `4(%esi)`.",
+        "C": "Source and destination would be reversed.",
+        "D": "There's no operation that XORs an address with a literal in this form."
+      },
+      "trapCategories": ["syntax-test", "mem-operand"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Operand order — destination last",
+      "stem": "In AT&T syntax, where does the destination operand go in `add $0x8, %ebx`?",
+      "choices": [
+        { "id": "A", "text": "First — `$0x8` is the destination, EBX is the source." },
+        { "id": "B", "text": "Last — EBX is the destination (and source); the immediate `$0x8` is added to EBX, with the result written to EBX." },
+        { "id": "C", "text": "There is no destination; both operands are sources." },
+        { "id": "D", "text": "Operand order depends on the assembler version." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "AT&T x86 syntax: destination always last. `add src, dst` does `dst = dst + src`. So `add $0x8, %ebx` means EBX += 8. Note this contrasts with Intel syntax (`add ebx, 0x8`), which puts destination first — easy to confuse if you switch tooling.",
+      "distractorAnalysis": {
+        "A": "Reverses the rule.",
+        "C": "There is a destination.",
+        "D": "Order is fixed by syntax convention."
+      },
+      "trapCategories": ["syntax-test", "att-vs-intel"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q10",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "push and pop semantics",
+      "stem": "Trace what `push %eax` does to the stack and ESP, given EAX = 0xcafef00d.",
+      "choices": [
+        { "id": "A", "text": "ESP increases by 4; the value 0xcafef00d is written one word above the new ESP." },
+        { "id": "B", "text": "ESP decreases by 4 (stack grows down); the value 0xcafef00d is written at the new ESP, becoming the lowest occupied word of the stack." },
+        { "id": "C", "text": "ESP is unchanged; 0xcafef00d is written one word above ESP." },
+        { "id": "D", "text": "ESP decreases by 1 byte; 0xcafef00d is truncated to 1 byte." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "`push %eax` is equivalent to: `sub $4, %esp; mov %eax, (%esp)`. ESP first decrements by 4 to allocate a word on the stack (stack grows down), then EAX is stored at that new address. EAX itself is unchanged. After the push, the lowest occupied stack word contains 0xcafef00d, and ESP points to it.",
+      "distractorAnalysis": {
+        "A": "Direction is wrong; stack grows down on x86.",
+        "C": "ESP must move; otherwise the next push would clobber.",
+        "D": "Push always moves a full word (4 bytes on 32-bit)."
+      },
+      "trapCategories": ["mechanism-test", "stack-direction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q11",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "push and pop semantics",
+      "stem": "Trace what `pop %eax` does to the stack and ESP, given the stack-top word holds 0xcafef00d.",
+      "choices": [
+        { "id": "A", "text": "Reads the word at ESP into EAX, then increments ESP by 4 (deallocating the slot). EAX becomes 0xcafef00d; the 4 bytes physically remain in memory but are below ESP and considered undefined." },
+        { "id": "B", "text": "Decrements ESP by 4 and zeros out EAX." },
+        { "id": "C", "text": "ESP is unchanged; EAX gets 0xcafef00d." },
+        { "id": "D", "text": "Both ESP and EAX become 0xcafef00d." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "`pop %eax` is equivalent to: `mov (%esp), %eax; add $4, %esp`. Read first, then deallocate. The bytes physically remain in memory but are no longer part of the active stack — anything above ESP is undefined. This detail matters for security: an attacker who knows old stack contents persist in memory can sometimes recover them.",
+      "distractorAnalysis": {
+        "B": "Pop moves ESP up (deallocates), not down.",
+        "C": "ESP must move.",
+        "D": "ESP and EAX are independent."
+      },
+      "trapCategories": ["mechanism-test", "stack-direction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Stack frame layout — locals, struct fields, globals",
+      "stem": "The lecture states three layout rules: (1) within a stack frame, individual variables are stored with the first variable at the highest address; (2) struct members are stored with the first member at the lowest address; (3) globals are stored with the first variable at the lowest address. Why does the rule for stack locals invert the rule for struct members and globals?",
+      "choices": [
+        { "id": "A", "text": "Stack locals are allocated by `sub $n, %esp` which moves ESP downward — the first declared local ends up at the highest address inside the new frame because the compiler subtracts space for it first. Struct members and globals are placed by the linker/loader into static memory laid out from low to high in declaration order." },
+        { "id": "B", "text": "Stack locals are allocated by `add` instead of `sub`." },
+        { "id": "C", "text": "Globals always grow downward like the stack." },
+        { "id": "D", "text": "There is no consistent rule; the compiler chooses arbitrarily." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The asymmetry comes from how each kind of memory is allocated. The function prologue subtracts a fixed amount from ESP to reserve space for all locals at once; from the compiler's perspective, the first declared local naturally lives at the top of the reserved region (highest address). For structs and globals, the linker writes bytes in declaration order from low to high. So the same source-code order produces opposite memory layouts.",
+      "distractorAnalysis": {
+        "B": "Locals are allocated by `sub`, decreasing ESP.",
+        "C": "Globals are in static memory, not the stack.",
+        "D": "Rules are consistent and compiler-mandated."
+      },
+      "trapCategories": ["mechanism-test", "layout-asymmetry"],
+      "diagramRef": "lecture-17-stack-layout-rules",
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "x86 calling convention — args on stack, EAX return",
+      "stem": "On 32-bit x86, where are arguments and return values for a normal function call located?",
+      "choices": [
+        { "id": "A", "text": "Arguments are passed in registers (EAX, EBX, ECX, ...); return values are placed on the stack." },
+        { "id": "B", "text": "Arguments are pushed onto the stack in reverse order (so `func(val1, val2, val3)` places val3 at the highest address, then val2, then val1); the return value is placed in EAX." },
+        { "id": "C", "text": "Arguments are placed in EAX; return values are pushed on the stack." },
+        { "id": "D", "text": "Both arguments and return values are passed in EBP." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Classic 32-bit x86 cdecl: arguments on the stack in reverse order (so the first argument ends up at the lowest address inside the saved-arg region — accessible via `8(%ebp)`), and return values in EAX. Reverse-order pushing supports varargs functions like printf — they walk forward from the format string to find later arguments at higher addresses.",
+      "distractorAnalysis": {
+        "A": "x86-32 uses stack for args; register-based ABIs are x86-64 (System V or Microsoft x64), not the lecture's setup.",
+        "C": "Reverses the convention.",
+        "D": "EBP is the frame pointer, not a calling-convention slot."
+      },
+      "trapCategories": ["abi-test", "32-bit-cdecl"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q14",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Caller-saved vs callee-saved",
+      "stem": "What does it mean for a register to be 'callee-saved' vs 'caller-saved' in the x86 calling convention?",
+      "choices": [
+        { "id": "A", "text": "Callee-saved: the called function must preserve the register's value across the call (saving and restoring it if it overwrites). Caller-saved: the called function may freely overwrite the register; if the caller wants to keep its value, the caller must save it before the call." },
+        { "id": "B", "text": "Callee-saved: only the OS can modify the register. Caller-saved: only userspace can." },
+        { "id": "C", "text": "Both terms mean the same thing." },
+        { "id": "D", "text": "Callee-saved registers are stored in the heap; caller-saved in the stack." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The convention divides registers between callee-preserves and caller-preserves to balance work: if a register is callee-saved, the callee bears the cost (push at entry, pop at exit) only when it needs to use that register; otherwise the caller can freely use the register without worrying. EBP is callee-saved (which is why the prologue does `push %ebp`); EAX/ECX/EDX are caller-saved.",
+      "distractorAnalysis": {
+        "B": "OS/userspace distinction is unrelated.",
+        "C": "Different responsibilities.",
+        "D": "Save location is just the stack."
+      },
+      "trapCategories": ["definition-test", "abi-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q15",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "11-step function call sequence",
+      "stem": "Order the following events for `caller` calling `callee(1, 2)` on 32-bit x86 (treating the caller and callee as a unit):",
+      "choices": [
+        { "id": "A", "text": "Push args (2, then 1) → `call` (push RIP, jump) → push old EBP → `mov %esp, %ebp` → `sub $n, %esp` → execute callee → `mov %ebp, %esp` → `pop %ebp` → `ret` (pop RIP) → caller cleans up args via `add $8, %esp`." },
+        { "id": "B", "text": "Push old EBP → push args → `call` → execute callee → `ret` → caller cleans args." },
+        { "id": "C", "text": "`call` → push args → push old EBP → `mov %esp, %ebp` → execute callee → `ret`." },
+        { "id": "D", "text": "`call` → execute callee → `ret` → caller pushes args and cleans up." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Walkthrough of the 11-step sequence: caller pushes args in reverse order (2 first, 1 last so 1 is at lowest address). `call` pushes return address (old EIP = RIP) and jumps. Callee's prologue: `push %ebp` (saves SFP), `mov %esp, %ebp` (sets up new frame top), `sub $n, %esp` (reserves locals). Callee executes. Epilogue: `mov %ebp, %esp` (deallocates locals), `pop %ebp` (restores caller's frame pointer), `ret` (pops return address into EIP). Caller does `add $8, %esp` to remove the two pushed args (cdecl convention).",
+      "distractorAnalysis": {
+        "B": "Old EBP is saved by the *callee*, not pushed before args.",
+        "C": "`call` pushes RIP and jumps; the callee's prologue handles EBP.",
+        "D": "Args must be pushed before `call`."
+      },
+      "trapCategories": ["call-sequence", "ordering-test"],
+      "diagramRef": "lecture-17-call-sequence",
+      "gameRef": "function-call-walkthrough"
+    },
+    {
+      "id": "L17-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "call instruction — push EIP, jump",
+      "stem": "What two operations does the single `call callee` instruction perform atomically?",
+      "choices": [
+        { "id": "A", "text": "Pushes the current EIP (the address of the instruction *after* the call) onto the stack, then jumps EIP to the callee's first instruction." },
+        { "id": "B", "text": "Pushes EBP and ESP." },
+        { "id": "C", "text": "Pops the return address from the stack." },
+        { "id": "D", "text": "Allocates a stack frame for the callee." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "`call` is the high-level instruction that wraps two essential steps. It saves the address of the instruction after the call as the return address (push EIP onto stack — becoming the RIP), then transfers control by setting EIP to the callee. Splitting these into two separate instructions would leave a window where an interrupt could break the symmetry; `call` is atomic.",
+      "distractorAnalysis": {
+        "B": "EBP is the callee's job (in the prologue).",
+        "C": "Pop is what `ret` does.",
+        "D": "Frame allocation is the callee's prologue."
+      },
+      "trapCategories": ["mechanism-test", "atomicity"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q17",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Function prologue — push %ebp; mov %esp, %ebp; sub $n, %esp",
+      "stem": "What does the canonical x86 function prologue `push %ebp; mov %esp, %ebp; sub $n, %esp` accomplish?",
+      "choices": [
+        { "id": "A", "text": "(1) Save the caller's EBP on the stack (the SFP). (2) Set the new EBP to the current ESP — making EBP point to the saved-EBP slot, which marks the top of the new frame. (3) Reserve `n` bytes on the stack for local variables by lowering ESP." },
+        { "id": "B", "text": "(1) Push EAX. (2) Move ESP to EAX. (3) Subtract n from EAX." },
+        { "id": "C", "text": "(1) Pop EBP. (2) Move EAX to EBP. (3) Add n to ESP." },
+        { "id": "D", "text": "(1) Push EIP. (2) Move ESP to EIP. (3) Subtract n from EIP." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Three steps. After (1) and (2), EBP points to the slot containing the previous EBP — the lecture's mnemonic 'EBP points to the old value of EBP.' After (3), ESP has moved down `n` bytes to reserve space for locals. The function body can then access locals via negative offsets from EBP (e.g., `-4(%ebp)` for the first local) and arguments via positive offsets (`8(%ebp)` for arg 1, since `4(%ebp)` holds the saved RIP).",
+      "distractorAnalysis": {
+        "B": "Wrong registers.",
+        "C": "Reverses the operations.",
+        "D": "EIP is set by `call` and `ret`, not by the prologue."
+      },
+      "trapCategories": ["mechanism-test", "prologue"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q18",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Function epilogue — leave; ret",
+      "stem": "The single instruction `leave` is equivalent to which two-instruction sequence, and what does the subsequent `ret` do?",
+      "choices": [
+        { "id": "A", "text": "`leave` ≡ `mov %ebp, %esp; pop %ebp` — first deallocates locals (ESP returns to saved-EBP slot), then restores the caller's EBP. Then `ret` pops the saved RIP into EIP, transferring control back to the caller." },
+        { "id": "B", "text": "`leave` ≡ `push %ebp; pop %eax` — saves EBP and pops it into EAX. `ret` returns the value." },
+        { "id": "C", "text": "`leave` ≡ `add $8, %esp; mov %ebp, %eip` — deallocates args. `ret` is redundant." },
+        { "id": "D", "text": "`leave` clears all registers; `ret` pushes EBP." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "`leave` is a one-instruction shortcut for the standard epilogue: restore ESP to where EBP points (deallocating the local-variable region), then pop EBP back to the caller's value (restoring the caller's frame pointer). `ret` then pops the saved return address into EIP, transferring control back to the instruction after the original `call`.",
+      "distractorAnalysis": {
+        "B": "Wrong semantics.",
+        "C": "Doesn't match the actual instruction.",
+        "D": "Fabricated."
+      },
+      "trapCategories": ["mechanism-test", "epilogue", "leave-instruction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q19",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Argument cleanup by caller",
+      "stem": "After `ret` returns control to the caller, who is responsible for removing the pushed arguments from the stack, and how is it done?",
+      "choices": [
+        { "id": "A", "text": "The callee, via the `ret` instruction." },
+        { "id": "B", "text": "The caller, by adjusting ESP (e.g., `add $8, %esp` for two pushed 4-byte arguments) — this is the cdecl calling convention. It allows variadic functions like printf because the callee doesn't know the argument count." },
+        { "id": "C", "text": "The OS automatically cleans the stack." },
+        { "id": "D", "text": "Arguments are never cleaned up; they remain on the stack forever." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Cdecl convention: caller cleans up. After `call ...; <args remain on stack>; ret`, the caller does `add $N, %esp` to remove them. This is what makes variadic functions possible — the callee doesn't have to know how many args were pushed, so it can't clean up reliably; only the caller knows. (Other conventions like stdcall have the callee clean via `ret $N`, but those don't support varargs.)",
+      "distractorAnalysis": {
+        "A": "`ret` only pops the return address.",
+        "C": "OS doesn't intervene.",
+        "D": "Without cleanup, the stack would grow unboundedly across many calls."
+      },
+      "trapCategories": ["abi-test", "cdecl-vs-stdcall"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q20",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "EBP points to old EBP — frame chain",
+      "stem": "The lecture's mnemonic for EBP is 'EBP points to the old value of EBP.' What useful property does this give the linked structure of saved frame pointers?",
+      "choices": [
+        { "id": "A", "text": "It creates a singly-linked list of stack frames: each EBP-pointed slot holds the previous EBP, walking which traces the entire call chain. This is what debuggers use to produce backtraces, and what stack canaries / shadow stacks are designed to protect — corrupting any EBP in the chain breaks the backtrace and may disrupt unwinding code." },
+        { "id": "B", "text": "EBP is irrelevant once a function returns." },
+        { "id": "C", "text": "It allows the heap to grow upward." },
+        { "id": "D", "text": "It encrypts the stack." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Each function's EBP points to the previous function's saved EBP, which points to the function before that, and so on. Walking this chain reveals every active frame back to `main`. Debuggers like gdb use this to print stack traces. Defenses like stack canaries and shadow stacks rely on these saved values being intact; attackers who corrupt them with overflows often disrupt subsequent unwinding code, sometimes giving a second exploitation vector.",
+      "distractorAnalysis": {
+        "B": "EBP is restored on return precisely so the chain remains usable.",
+        "C": "Heap is unrelated.",
+        "D": "Nothing is encrypted."
+      },
+      "trapCategories": ["synthesis", "frame-chain", "backtrace"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q21",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "RIP and SFP terminology",
+      "stem": "Why does the lecture introduce both 'EIP / EBP' and 'RIP / SFP' as terminology for what could appear to be the same concepts?",
+      "choices": [
+        { "id": "A", "text": "EIP and EBP are CPU registers (live state); RIP (return instruction pointer) and SFP (saved frame pointer) are the *saved copies* of those registers stored on the stack during a function call. The distinction matters for buffer overflow analysis: 'overwriting the RIP' means writing to a stack location, not directly to a register — the register only changes when `ret` later loads from that location." },
+        { "id": "B", "text": "They are interchangeable synonyms." },
+        { "id": "C", "text": "RIP and SFP are 64-bit versions of EIP and EBP." },
+        { "id": "D", "text": "RIP and SFP are pseudo-registers that don't physically exist." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Critical distinction for memory safety. The CPU has one EIP register and one EBP register. During a function call, the previous values are saved on the stack; those stack-resident copies are named RIP (return instruction pointer — what EIP will be restored to) and SFP (saved frame pointer — what EBP will be restored to). When a buffer overflow 'overwrites the RIP,' it writes to a stack address, not the register; the corruption only takes effect when `ret` later pops the corrupted bytes into EIP.",
+      "distractorAnalysis": {
+        "B": "Different concepts.",
+        "C": "On 64-bit x86, RIP confusingly *is* the name of the 64-bit instruction pointer register — but in this 32-bit lecture context, RIP means the saved return address. Always note context.",
+        "D": "They are stack-resident bytes, very real."
+      },
+      "trapCategories": ["terminology", "register-vs-saved"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q22",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Stack frames — EBP, ESP",
+      "stem": "Inside a function with one local `int x`, after the standard prologue, where can `x` be accessed?",
+      "choices": [
+        { "id": "A", "text": "At `4(%ebp)`." },
+        { "id": "B", "text": "At `-4(%ebp)` — the first local sits 4 bytes below EBP, which points to the saved EBP." },
+        { "id": "C", "text": "At `0(%ebp)`." },
+        { "id": "D", "text": "At `8(%ebp)`." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "After the prologue, EBP points to the saved-EBP slot. Locals live below EBP (at lower addresses); the first local is at `-4(%ebp)`. Conversely, `4(%ebp)` is where the saved RIP lives, and `8(%ebp)` is where the first argument lives. Memorizing these offsets is helpful for reading any disassembled x86 function.",
+      "distractorAnalysis": {
+        "A": "That's the saved RIP.",
+        "C": "That's the saved EBP itself.",
+        "D": "That's the first argument."
+      },
+      "trapCategories": ["offset-test", "stack-frame-reading"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q23",
+      "type": "DIAGRAM",
+      "difficulty": "Advanced",
+      "topic": "Stack frame layout — locals, struct fields, globals",
+      "stem": "For the code `struct foo { long long f1; int f2; int f3; }; void func(void) { int a; struct foo b; int c; }`, the lecture's stack diagram shows ordering. From highest to lowest address, what is the correct order?",
+      "choices": [
+        { "id": "A", "text": "a, b.f3, b.f2, b.f1 (high half), b.f1 (low half), c — i.e., `a` is at the highest address (first declared local), `c` is at the lowest (last declared); within the struct `b`, `f1` is at the lowest address (first declared field) and `f3` at the highest." },
+        { "id": "B", "text": "c, b.f1, b.f2, b.f3, a — alphabetical order." },
+        { "id": "C", "text": "All locals are at the same address." },
+        { "id": "D", "text": "a, c, b.f1, b.f2, b.f3 — primitives before structs." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Two layout rules combine: (1) locals — first declared lives at highest address (so `a` is highest, `c` is lowest); (2) struct members — first declared lives at lowest address (so within `b`, `f1` is at the lowest address). f1 is 8 bytes (two stack rows). Result top to bottom: a, b.f3, b.f2, b.f1 (high word), b.f1 (low word), c. The asymmetry trips students up — exam favorite.",
+      "distractorAnalysis": {
+        "B": "Layout has nothing to do with alphabetical order.",
+        "C": "Each variable has its own slot.",
+        "D": "Primitives don't get reordered before structs."
+      },
+      "trapCategories": ["diagram-read", "layout-asymmetry"],
+      "diagramRef": "lecture-17-struct-layout",
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "11-step function call sequence",
+      "stem": "How does this lecture's material set up the buffer overflow attacks discussed in Lecture 15 — what foundational concept is required?",
+      "choices": [
+        { "id": "A", "text": "The detailed function-call mechanics establish that the saved RIP is a stack-resident value placed at a known offset from local buffers — this is the precise structural fact that lets `gets(buffer)` overwrite the saved RIP and that `ret` will then load attacker-chosen bytes into EIP. Without this layout, buffer overflows would still corrupt memory but couldn't reliably hijack control flow." },
+        { "id": "B", "text": "It establishes that x86 is faster than RISC-V." },
+        { "id": "C", "text": "It establishes that registers are encrypted." },
+        { "id": "D", "text": "It is unrelated to memory safety attacks." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Buffer overflows are 'just' memory corruption in a vacuum; what makes them weapons is the stack layout: every function frame stores a return address at a *predictable* offset from its local buffers. Once an attacker overflows past the locals and SFP, they hit the saved RIP at a known position. `ret` will then pop that into EIP. The whole exploit chain is built on the architectural commitments documented in this lecture.",
+      "distractorAnalysis": {
+        "B": "Speed isn't the connection.",
+        "C": "Nothing is encrypted.",
+        "D": "Tightly related; this is the foundation."
+      },
+      "trapCategories": ["synthesis", "cross-lecture"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L17-Q25",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "x86 calling convention — args on stack, EAX return",
+      "stem": "Disassembling an unknown function reveals it returns `42` via `mov $42, %eax; leave; ret`. What does this tell you about the function's calling convention and behavior?",
+      "choices": [
+        { "id": "A", "text": "It follows standard x86 cdecl: the integer return value is placed in EAX before returning. `leave` cleans up the local stack frame; `ret` returns control. The function returns the constant 42 with no other side effects visible from this snippet." },
+        { "id": "B", "text": "It returns 42 through the stack at offset 8(%esp)." },
+        { "id": "C", "text": "It returns 42 by writing to memory at address 0x42." },
+        { "id": "D", "text": "EAX is irrelevant here." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The lecture's exact example. Integer return values up to 32 bits go in EAX in x86 cdecl. `mov $42, %eax` sets the return value; `leave` and `ret` complete the standard epilogue. From a single function this is all the information available — caller behavior (e.g., what they do with EAX after) requires looking at the call site.",
+      "distractorAnalysis": {
+        "B": "Args are at 8(%ebp); return values are in EAX, not on the stack.",
+        "C": "Address 0x42 is not how returns work.",
+        "D": "EAX carries the return value — central to the convention."
+      },
+      "trapCategories": ["disassembly-reading", "abi-test"],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

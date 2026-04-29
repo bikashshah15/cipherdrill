@@ -1,0 +1,610 @@
+{
+  "lectureId": "lecture-14-dos-and-firewalls",
+  "lectureTitle": "Denial of Service & Firewalls",
+  "lectureNumber": 14,
+  "topics": [
+    "Availability vs DoS",
+    "DoS strategies — flaws vs resource exhaustion",
+    "Bottlenecks",
+    "Application-level vs network-level DoS",
+    "Algorithmic complexity attacks",
+    "Application-level defenses — identification, isolation, quotas",
+    "Proof-of-work and CAPTCHAs",
+    "Overprovisioning and CDNs",
+    "Network-level DoS — bandwidth vs packet processing",
+    "Distributed DoS (DDoS) and botnets",
+    "Amplified DoS — DNS amplification",
+    "Why amplification requires UDP",
+    "Network-level defenses — packet filtering",
+    "SYN flooding mechanism",
+    "TCP handshake diagram",
+    "Idealized SYN cookies",
+    "Practical SYN cookies — encoding in sequence number",
+    "SYN cookies and source spoofing",
+    "Firewalls — complete mediation",
+    "Default-deny vs default-allow",
+    "Stateless packet filters — ACK-flag hack",
+    "Stateful packet filters",
+    "Subverting packet filters — split payloads",
+    "Subverting packet filters — TTL manipulation",
+    "Proxy firewalls",
+    "VPN tunneling"
+  ],
+  "questions": [
+    {
+      "id": "L14-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Availability vs DoS",
+      "stem": "Which definition of availability best matches the property a DoS attack targets?",
+      "choices": [
+        { "id": "A", "text": "The guarantee that data sent over the network cannot be read by an attacker." },
+        { "id": "B", "text": "The guarantee that legitimate users can use a service when they need to." },
+        { "id": "C", "text": "The guarantee that data has not been modified in transit." },
+        { "id": "D", "text": "The guarantee that the user is who they claim to be." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Availability is the CIA-triad property that legitimate users can reach a service. DoS does not break confidentiality or integrity — the data and identities are unaffected — it simply makes the service unreachable for the people entitled to use it.",
+      "distractorAnalysis": {
+        "A": "That's confidentiality, not availability. DoS does not require reading any traffic.",
+        "C": "That's integrity. DoS attacks can succeed without modifying any packet contents.",
+        "D": "That's authentication. A successfully authenticated user still loses service in a DoS."
+      },
+      "trapCategories": ["definition-test", "cia-triad-confusion"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Bottlenecks",
+      "stem": "A web service has 100 GB of RAM, 16 CPU cores, but only a 10 MB/s internet uplink. Why does the bottleneck concept matter for the attacker?",
+      "choices": [
+        { "id": "A", "text": "The attacker must exhaust all three resources to take the service offline." },
+        { "id": "B", "text": "The attacker only needs to saturate the weakest resource — the 10 MB/s uplink — to deny service." },
+        { "id": "C", "text": "Bottlenecks are irrelevant because modern services autoscale all resources together." },
+        { "id": "D", "text": "Bottlenecks only matter at the application layer, not the network layer." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Resource exhaustion succeeds the moment any single critical resource is saturated. The attacker doesn't have to match server capacity across the board — they only need enough firepower to overwhelm the smallest dimension. The 10 MB/s pipe is the bottleneck, so legitimate users are denied service even though RAM and CPU have plenty of headroom.",
+      "distractorAnalysis": {
+        "A": "Backwards — exhausting any one bottleneck is sufficient, not necessary across all.",
+        "C": "Absolutist and false. Autoscaling helps for some resources but doesn't eliminate physical bottlenecks like a fixed uplink.",
+        "D": "False — bottlenecks matter at every layer, and the example given (uplink) is a network-level bottleneck."
+      },
+      "trapCategories": ["mechanism-test", "absolutist-language"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q03",
+      "type": "APPLICATION",
+      "difficulty": "Foundational",
+      "topic": "Application-level vs network-level DoS",
+      "stem": "An attacker repeatedly submits search queries containing pathological regex patterns that take seconds of CPU time each. The server is reachable on the network but the search feature times out. This is best classified as:",
+      "choices": [
+        { "id": "A", "text": "Network-level DoS, because requests are arriving over the network." },
+        { "id": "B", "text": "Application-level DoS, because the resource being exhausted is application logic (CPU on regex evaluation)." },
+        { "id": "C", "text": "Amplified DoS, because the response is larger than the request." },
+        { "id": "D", "text": "A SYN flood, because connections are being established." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Application-level DoS targets resources the application itself consumes — CPU, memory, threads, application-specific state. Network-level DoS targets the link or packet-processing capacity. The fact that the network is fine but search is overwhelmed is the diagnostic signature of application-level DoS.",
+      "distractorAnalysis": {
+        "A": "Conflates 'arrives via network' with 'targets the network.' Every remote attack arrives via network — the question is what resource it exhausts.",
+        "C": "Amplification requires that a small request produce a large response, which is unrelated here.",
+        "D": "SYN flood specifically exhausts TCP state by sending SYN packets without completing handshakes."
+      },
+      "trapCategories": ["classification-test", "conflation"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Algorithmic complexity attacks",
+      "stem": "The lecture claims 'mergesort is safer than quicksort against DoS.' Why?",
+      "choices": [
+        { "id": "A", "text": "Mergesort runs faster on average than quicksort." },
+        { "id": "B", "text": "Mergesort's worst-case runtime is O(n log n), while quicksort's is O(n²) — an attacker who chooses pathological inputs can drive quicksort to its quadratic worst case." },
+        { "id": "C", "text": "Quicksort is recursive and recursion is inherently DoS-vulnerable." },
+        { "id": "D", "text": "Mergesort uses less memory, so it can never be exhausted." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Algorithmic complexity attacks supply inputs that trigger an algorithm's worst case. Quicksort's expected and worst cases differ dramatically (O(n log n) vs O(n²)) — for n=10^6 that's ~20M ops vs 10^12 ops. Mergesort has the same worst-case as expected, so an attacker can't make it pathologically slow no matter what input they choose.",
+      "distractorAnalysis": {
+        "A": "Average-case speed is irrelevant to DoS resistance — the attacker is paid to find the worst case.",
+        "C": "Recursion isn't the issue; mergesort is also recursive.",
+        "D": "False on both counts — mergesort actually uses more memory than quicksort, and memory exhaustion is a separate concern from algorithmic complexity."
+      },
+      "trapCategories": ["mechanism-test", "expected-vs-worst-case"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q05",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Application-level defenses — identification, isolation, quotas",
+      "stem": "Which of the following is NOT something the 'identification' step provides as part of an application-level DoS defense?",
+      "choices": [
+        { "id": "A", "text": "A way to distinguish requests from different users." },
+        { "id": "B", "text": "A precondition for applying per-user quotas." },
+        { "id": "C", "text": "A guarantee that the authentication step itself cannot be DoSed." },
+        { "id": "D", "text": "A method to attribute resource consumption to a specific user." }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Identification gives you a way to tell users apart, which is required before you can apply isolation or quotas. The lecture explicitly notes the catch: authenticating users 'might be expensive and itself vulnerable to DoS' — the identification system can become its own DoS vector. So identification provides distinguishability, but not protection of the identification mechanism.",
+      "distractorAnalysis": {
+        "A": "True — that's the textbook definition of the identification step ('Step 0').",
+        "B": "True — quotas only make sense if you can map a request to a user.",
+        "D": "True — attribution requires identification first."
+      },
+      "trapCategories": ["not-provide", "self-referential-vulnerability"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q06",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Proof-of-work and CAPTCHAs",
+      "stem": "A startup adds a CAPTCHA to its login form. Which statement most accurately describes what this defense achieves against DoS?",
+      "choices": [
+        { "id": "A", "text": "It eliminates DoS attacks because attackers cannot solve CAPTCHAs." },
+        { "id": "B", "text": "It raises the attacker's cost per request — they must solve or pay for CAPTCHA solving — but does not eliminate the attack." },
+        { "id": "C", "text": "It is purely cosmetic and provides no DoS resistance." },
+        { "id": "D", "text": "It works by overprovisioning the login service." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Proof-of-work defenses (CAPTCHAs are the classic example) shift the attack economics: each request now costs the attacker time or money. The lecture is explicit that 'security is economics' — the attacker can still attack, but they must spend resources to do so. CAPTCHA-solving services exist precisely because attackers do scale through this defense; it just costs them.",
+      "distractorAnalysis": {
+        "A": "Absolutist — CAPTCHA-solving farms exist and automated solvers handle many CAPTCHA types.",
+        "C": "Wrong direction — proof-of-work is a real defense, just an economic rather than absolute one.",
+        "D": "Conflates two different defenses. CAPTCHAs raise attacker cost; overprovisioning raises defender capacity."
+      },
+      "trapCategories": ["absolutist-language", "security-is-economics"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q07",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Overprovisioning and CDNs",
+      "stem": "The lecture calls overprovisioning 'often the most effective defense' against DoS. Which claim best captures why this counterintuitive statement is correct?",
+      "choices": [
+        { "id": "A", "text": "Because overprovisioning is free and always available." },
+        { "id": "B", "text": "Because overprovisioning addresses the root cause of every DoS attack — finite resources — by directly raising the resource ceiling, often via a CDN like Cloudflare that aggregates capacity across many customers." },
+        { "id": "C", "text": "Because overprovisioning is mathematically guaranteed to defeat any attacker." },
+        { "id": "D", "text": "Because overprovisioning eliminates the need for identification, quotas, and proof-of-work." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Every DoS attack exploits the gap between attacker resources and defender resources. Overprovisioning closes the gap by raising the defender's ceiling. CDNs like Cloudflare make this affordable by pooling capacity across thousands of customers — any single customer rents access to enormous bandwidth. It's 'most effective' in practice because it's the only defense that works regardless of what specific resource is targeted.",
+      "distractorAnalysis": {
+        "A": "False — the lecture explicitly notes overprovisioning 'can cost the server a lot of money.'",
+        "C": "Absolutist — a sufficiently determined attacker (e.g. a nation-state) can still outresource any defender.",
+        "D": "Defenses are complementary, not substitutes. Overprovisioning protects against capacity attacks but doesn't address things like algorithmic complexity attacks at the application layer."
+      },
+      "trapCategories": ["security-is-economics", "absolutist-language"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q08",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Network-level DoS — bandwidth vs packet processing",
+      "stem": "The lecture distinguishes two flavors of network-level flooding. To overwhelm packet-processing capacity (rather than bandwidth), what kind of packets should the attacker send?",
+      "choices": [
+        { "id": "A", "text": "Lots of maximum-sized packets to consume the most bytes per packet." },
+        { "id": "B", "text": "Lots of minimum-sized packets — packet-processing cost is per-packet, not per-byte." },
+        { "id": "C", "text": "A small number of carefully timed packets." },
+        { "id": "D", "text": "Encrypted packets that the server cannot process." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The two flooding strategies optimize for different bottlenecks. To saturate bandwidth (bytes/second), use big packets. To saturate packet-processing capacity (packets/second), use tiny packets — every minimum-sized packet costs the server roughly the same per-packet processing overhead as a maximum-sized one, so you maximize the rate. The lecture explicitly contrasts 'lots of maximum-sized packets' (bandwidth) with 'lots of minimum-sized packets' (packet processing).",
+      "distractorAnalysis": {
+        "A": "That's the bandwidth-flooding strategy, not packet-processing.",
+        "C": "Carefully timed small attacks describe Slowloris-style attacks, not flooding.",
+        "D": "Encryption is unrelated to packet count or size."
+      },
+      "trapCategories": ["mechanism-test", "byte-vs-packet"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Distributed DoS (DDoS) and botnets",
+      "stem": "Why is DDoS harder for a packet filter to defend against than single-source DoS?",
+      "choices": [
+        { "id": "A", "text": "DDoS packets are encrypted and stateless filters cannot inspect them." },
+        { "id": "B", "text": "DDoS traffic genuinely originates from many distinct IP addresses, so source-IP-based filtering cannot distinguish attack traffic from a flash crowd of legitimate users." },
+        { "id": "C", "text": "DDoS uses UDP, which firewalls cannot filter." },
+        { "id": "D", "text": "Botnets only attack on Tuesdays, making timing-based detection unreliable." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Single-source DoS gives the filter an obvious signal — block that one IP. DDoS distributes the attack across thousands of compromised hosts, each sending modest traffic. The filter sees a wide spread of source IPs that look like a legitimate traffic surge. There's no single bad IP to block, and dropping all traffic from any heavy IP would also drop legitimate users.",
+      "distractorAnalysis": {
+        "A": "Encryption is unrelated — DDoS works fine with plaintext.",
+        "C": "DDoS works over any protocol; firewalls can filter UDP.",
+        "D": "Fabricated."
+      },
+      "trapCategories": ["mechanism-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q10",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Amplified DoS — DNS amplification",
+      "stem": "In a DNS amplification attack, what is the precise role of source-address spoofing?",
+      "choices": [
+        { "id": "A", "text": "The attacker spoofs the DNS server's address so the victim ignores the response." },
+        { "id": "B", "text": "The attacker sends a small DNS query with the source address spoofed to the victim's IP, causing the DNS server's much larger response to be delivered to the victim instead of the attacker." },
+        { "id": "C", "text": "The attacker spoofs the victim's address inside the query payload, but the response goes back to the attacker." },
+        { "id": "D", "text": "Spoofing is not used in amplification attacks." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Amplification has two ingredients: (1) a service that gives big responses to small requests (DNS does this — small question, large response with answer/authority/additional records), and (2) source-IP spoofing so the response is misdelivered. The attacker forges 'From: Victim, To: DNS Server' on a tiny query; the DNS server replies 'From: Server, To: Victim' with a much larger packet. The victim absorbs the bandwidth bill and cannot trace the source.",
+      "distractorAnalysis": {
+        "A": "Backwards. The attacker spoofs the victim's address, not the server's.",
+        "C": "Confuses where the spoofed address lives — it must be in the IP source field of the request, not the payload, so the network routes the reply to the victim.",
+        "D": "Spoofing is the entire mechanism that makes amplification useful as a DoS attack."
+      },
+      "trapCategories": ["mechanism-test", "spoofing-direction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q11",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Why amplification requires UDP",
+      "stem": "Amplified DoS attacks 'cannot work over TCP' according to the lecture. Why?",
+      "choices": [
+        { "id": "A", "text": "TCP packets are too large to be amplified." },
+        { "id": "B", "text": "TCP requires a three-way handshake; an attacker who spoofs the source address never receives the SYN-ACK, so the connection never establishes — blind TCP spoofing is assumed hard." },
+        { "id": "C", "text": "TCP encrypts traffic and the attacker cannot read the response." },
+        { "id": "D", "text": "Firewalls universally block spoofed TCP packets." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Amplification requires blind spoofing — sending a request with a forged source address. UDP is fire-and-forget: one packet in, one (large) packet out to the spoofed address. TCP requires the handshake to complete before any application data flows. The server's SYN-ACK goes to the spoofed (victim) address, not the attacker, so the attacker can't supply the correct ACK and the connection dies. No connection, no amplification.",
+      "distractorAnalysis": {
+        "A": "Packet size is not the issue.",
+        "C": "TCP itself does not encrypt — that's TLS, a separate layer.",
+        "D": "Not universally true; the issue is the protocol mechanics, not policy."
+      },
+      "trapCategories": ["mechanism-test", "tcp-vs-udp"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q12",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Network-level defenses — packet filtering",
+      "stem": "Which of the following does a packet filter NOT reliably provide as a DoS defense?",
+      "choices": [
+        { "id": "A", "text": "Dropping packets that match a known-bad source IP." },
+        { "id": "B", "text": "Dropping packets that match a known-bad payload pattern." },
+        { "id": "C", "text": "Effective protection when placed downstream of the bottleneck it is meant to protect." },
+        { "id": "D", "text": "Reducing load on the protected service when the malicious traffic is distinguishable from legitimate." }
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "The lecture explicitly states 'the packet filter must be before the bottleneck.' A filter placed downstream is useless — by the time traffic reaches it, the bottleneck (e.g. the uplink) has already been saturated. Filtering after the fact wastes effort because the damage is done. The other three describe what packet filters legitimately do.",
+      "distractorAnalysis": {
+        "A": "True — IP-based filtering is the basic packet-filter capability.",
+        "B": "True — content-pattern filters are a real (if defeatable) defense.",
+        "D": "True — when the filter can distinguish malicious from legitimate, it does reduce load on the protected service."
+      },
+      "trapCategories": ["not-provide", "placement-trap"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "SYN flooding mechanism",
+      "stem": "What asymmetry makes SYN flooding particularly effective?",
+      "choices": [
+        { "id": "A", "text": "The attacker must allocate kernel state for each SYN, but the server does not." },
+        { "id": "B", "text": "The server allocates TCP state on receiving each SYN, while the attacker only needs to send the SYN packet — they don't have to complete the handshake or maintain any per-connection state themselves." },
+        { "id": "C", "text": "SYN packets are larger than ACK packets, so the bandwidth cost falls on the attacker." },
+        { "id": "D", "text": "SYN flooding requires the attacker to consume disk space on their own machine." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Resource exhaustion attacks work best when the attacker spends little to make the defender spend much. With a SYN flood, the server must allocate a TCB (sequence numbers, ACK numbers, buffer space) per incoming SYN. The attacker, in contrast, can spam SYNs from spoofed source addresses with no per-connection bookkeeping. One SYN packet on the wire = one chunk of server kernel memory consumed.",
+      "distractorAnalysis": {
+        "A": "Backwards — the server allocates state, not the attacker.",
+        "C": "Backwards on bandwidth incidence and irrelevant to the asymmetry.",
+        "D": "Fabricated."
+      },
+      "trapCategories": ["asymmetry-test", "mechanism-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q14",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "TCP handshake diagram",
+      "stem": "In a normal TCP three-way handshake (Slide 24), at which message does the server allocate connection state?",
+      "choices": [
+        { "id": "A", "text": "When it sends its initial SYN." },
+        { "id": "B", "text": "When it receives the client's SYN." },
+        { "id": "C", "text": "When it receives the client's ACK that completes the handshake." },
+        { "id": "D", "text": "When the first application-layer data byte arrives." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The slide states 'TCP state is allocated upon receiving a SYN.' This is the property the SYN flood exploits — the server commits resources on the very first packet, before any verification that the client is real. The whole point of SYN cookies is to defer this allocation until later in the handshake.",
+      "distractorAnalysis": {
+        "A": "The server doesn't initiate; the client sends the first SYN.",
+        "C": "That's when SYN cookies allocate state — the lecture is contrasting this safer behavior with the vanilla TCP behavior.",
+        "D": "TCP state exists before any application data, by design."
+      },
+      "trapCategories": ["diagram-read", "syn-cookie-confusion"],
+      "diagramRef": "lecture-14-tcp-handshake",
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q15",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Idealized SYN cookies",
+      "stem": "In the idealized SYN cookie scheme (Slide 26), what happens to the server's connection state during the handshake?",
+      "choices": [
+        { "id": "A", "text": "The server allocates state on the SYN, just as in vanilla TCP." },
+        { "id": "B", "text": "The server generates state, encodes it with a secret, sends it to the client in the SYN-ACK, and only allocates state for itself after the client returns the cookie in the ACK and it validates." },
+        { "id": "C", "text": "The client and server both allocate state simultaneously." },
+        { "id": "D", "text": "The server never allocates state; the client maintains it for the lifetime of the connection." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Idealized SYN cookies invert the storage burden: instead of the server storing per-connection state speculatively, it sends the (authenticated) state to the client and demands it back on the ACK. Only when the ACK arrives with a valid cookie does the server finally commit memory. Spoofed SYNs no longer cost the server anything, because the server never touched its memory until proof-of-completion arrived.",
+      "distractorAnalysis": {
+        "A": "That's the vanilla behavior the cookie scheme is designed to replace.",
+        "C": "Symmetry isn't the point — the cookie scheme deliberately offloads server state to the client.",
+        "D": "Once the connection is real, the server does store state — only the speculative pre-handshake state is offloaded."
+      },
+      "trapCategories": ["mechanism-test", "state-offload"],
+      "diagramRef": "lecture-14-syn-cookie-idealized",
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Practical SYN cookies — encoding in sequence number",
+      "stem": "Practical SYN cookies (Slide 27) face a constraint that the idealized version doesn't. What is it, and how is it solved?",
+      "choices": [
+        { "id": "A", "text": "TCP has no field designated for arbitrary state, so the server encodes the cookie into its initial sequence number — the client mirrors it back in the ACK number." },
+        { "id": "B", "text": "TCP requires a fourth handshake message, so the cookie is sent there." },
+        { "id": "C", "text": "Sequence numbers are random, so the cookie must be transmitted in the payload." },
+        { "id": "D", "text": "Practical SYN cookies require modifications to the TCP standard." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "TCP has no 'extra state' field, so practical SYN cookies repurpose the 32-bit initial sequence number that the server is sending anyway. The cookie is generated as a MAC of (client IP, port, server secret, ...) compressed into 32 bits and used as the SEQ in the SYN-ACK. The client returns SEQ+1 as its ACK number — recovering the cookie for validation. No protocol changes required; this works with any standard TCP client.",
+      "distractorAnalysis": {
+        "B": "TCP has no fourth handshake message.",
+        "C": "Initial sequence numbers are normally chosen pseudo-randomly, but for SYN cookies the server intentionally chooses the value to encode the cookie. Putting it in the payload is impossible because the server hasn't received any client payload yet.",
+        "D": "Practical SYN cookies are a server-side trick; they're invisible to TCP-compliant clients."
+      },
+      "trapCategories": ["mechanism-test", "in-band-encoding"],
+      "diagramRef": "lecture-14-syn-cookie-practical",
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q17",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "SYN cookies and source spoofing",
+      "stem": "The lecture observes that with SYN cookies, 'the attacker can't spoof source addresses.' Why does this property fall out of the cookie design rather than requiring a separate anti-spoofing mechanism?",
+      "choices": [
+        { "id": "A", "text": "The cookie itself is encrypted." },
+        { "id": "B", "text": "Because the server allocates no state until a valid ACK arrives, and the ACK can only be produced by an attacker who actually received the SYN-ACK at the claimed source address — spoofing the SYN doesn't help, since the SYN-ACK goes elsewhere." },
+        { "id": "C", "text": "Because TCP automatically validates source addresses." },
+        { "id": "D", "text": "Because SYN cookies require the client to authenticate." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Spoofing only requires the attacker to write packets with a forged source. Completing the handshake requires receiving the server's SYN-ACK and returning the right ACK number. If the source was forged, the SYN-ACK is delivered to the spoofed address, not the attacker — so the attacker cannot produce a valid ACK. SYN cookies leverage this asymmetry: filters can now safely drop SYNs from sources that never complete handshakes, since legitimate sources always complete.",
+      "distractorAnalysis": {
+        "A": "Encryption isn't the mechanism — the cookie is authenticated by a server-side secret, not encrypted.",
+        "C": "TCP/IP has no built-in source-address validation; that's what makes spoofing possible in the first place.",
+        "D": "There's no client-side authentication step in TCP."
+      },
+      "trapCategories": ["synthesis", "spoofing-asymmetry"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q18",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Firewalls — complete mediation",
+      "stem": "What is the core idea of 'complete mediation' as it applies to firewalls?",
+      "choices": [
+        { "id": "A", "text": "Every internal host runs its own firewall." },
+        { "id": "B", "text": "All traffic between protected systems and untrusted networks must pass through a single monitored choke point — the firewall." },
+        { "id": "C", "text": "The firewall encrypts all traffic." },
+        { "id": "D", "text": "The firewall allows traffic only during business hours." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Complete mediation means there is no path around the security check. For a firewall, this requires that every packet entering or leaving the protected zone passes through the firewall — no side channels, no unmonitored links. Without this, the firewall's policy is meaningless because attackers can simply route around it.",
+      "distractorAnalysis": {
+        "A": "That's host-based firewalling, a different architecture (and arguably the opposite of the choke-point model).",
+        "C": "Encryption is a separate property and many firewalls don't encrypt at all.",
+        "D": "Time-based policies exist but aren't the definition of complete mediation."
+      },
+      "trapCategories": ["definition-test", "principle-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q19",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Default-deny vs default-allow",
+      "stem": "An admin argues, 'Default-allow is fine — we'll just add bad things to the denylist as we find them.' What's the principled rebuttal?",
+      "choices": [
+        { "id": "A", "text": "Default-allow uses more memory than default-deny." },
+        { "id": "B", "text": "With default-allow, every gap in the denylist is a live vulnerability; with default-deny, every gap in the allowlist is just a missing feature. The 'consider fail-safe defaults' principle says safety is the better failure mode." },
+        { "id": "C", "text": "Default-allow is incompatible with stateful firewalls." },
+        { "id": "D", "text": "Default-deny is faster on modern hardware." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The fail-safe-defaults principle is fundamentally about which kind of failure is recoverable. Default-allow fails open — anything you forgot to denylist is silently exposed and can be exploited until you notice. Default-deny fails closed — anything you forgot to allowlist breaks for users, who immediately complain, prompting a fix. Both have flaws; default-deny's flaws are loud and recoverable, default-allow's are silent and catastrophic.",
+      "distractorAnalysis": {
+        "A": "Memory usage is not the principled argument.",
+        "C": "Both default policies work fine with either filter type.",
+        "D": "Performance isn't the principled argument and the difference is trivial."
+      },
+      "trapCategories": ["principle-test", "fail-safe-defaults"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q20",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Stateless packet filters — ACK-flag hack",
+      "stem": "A stateless TCP firewall implements 'allow inbound traffic that is part of an established connection' using the ACK-flag heuristic. Which of the following describes the heuristic correctly and identifies its limitation?",
+      "choices": [
+        { "id": "A", "text": "Allow only inbound packets with the ACK flag set; this is correct because every reply to an outbound connection has ACK set, but it allows attackers to craft ACK-set packets to bypass the filter." },
+        { "id": "B", "text": "Allow only inbound packets with the SYN flag set; this is wrong because SYN-set packets initiate connections, not respond to them." },
+        { "id": "C", "text": "Allow all inbound packets; this is the same as default-allow." },
+        { "id": "D", "text": "Block all inbound packets; this is the same as default-deny." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The lecture describes the stateless hack: allow inbound traffic with ACK set, deny without. This works because legitimate replies to outbound connections always have ACK set. The trick is that an attacker with no prior connection can still craft a packet with ACK set; the firewall lets it through. The internal host generally responds with RST or ignores it, but any application that doesn't validate context could be reachable. The heuristic is a hack precisely because it can't distinguish real replies from fake ones.",
+      "distractorAnalysis": {
+        "B": "Misstates the rule and isn't the lecture's example.",
+        "C": "Default-allow doesn't approximate connection-tracking at all.",
+        "D": "Default-deny breaks legitimate replies."
+      },
+      "trapCategories": ["mechanism-test", "stateless-vs-stateful"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q21",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Stateful packet filters",
+      "stem": "What does a stateful packet filter track that a stateless filter cannot, and why does this enable richer policies?",
+      "choices": [
+        { "id": "A", "text": "It tracks per-packet checksums for integrity." },
+        { "id": "B", "text": "It tracks the state of inbound/outbound connections — recognizing that a connection has packets going in both directions — which lets it enforce rules like 'allow only inbound packets that are part of a connection initiated from inside.'" },
+        { "id": "C", "text": "It tracks the encryption keys used by TLS." },
+        { "id": "D", "text": "It tracks DNS records." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A connection has a flow of packets in both directions. A stateless filter sees each packet in isolation and can't reason about whether 'this incoming packet is part of an outgoing connection.' A stateful filter remembers the SYN, the SYN-ACK, the ACK — and can therefore enforce policies that depend on connection history. That's also why stateful filters can do things like decode HTTP request/response pairs or track files in an FTP session.",
+      "distractorAnalysis": {
+        "A": "Checksums are per-packet and don't require state.",
+        "C": "Filters generally can't see TLS keys; they're a TLS endpoint property.",
+        "D": "DNS is a separate protocol; filters can but typically don't track it as their core function."
+      },
+      "trapCategories": ["stateless-vs-stateful", "mechanism-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q22",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Subverting packet filters — split payloads",
+      "stem": "A packet filter blocks any packet whose payload contains the byte sequence 'root'. An attacker splits 'root' across four TCP segments (one byte per segment) and sends them out of order. Why does this defeat a naive stateless filter, and what would a stateful filter need to do to catch it?",
+      "choices": [
+        { "id": "A", "text": "No single packet contains 'root', so a per-packet content match fails. A stateful filter must reassemble the TCP byte stream — including reordering by sequence number — before applying the content match, which is expensive." },
+        { "id": "B", "text": "Splitting changes the checksum, fooling the filter." },
+        { "id": "C", "text": "TCP automatically encrypts split packets." },
+        { "id": "D", "text": "The filter can't see split packets at all." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Stateless filters operate per-packet; if no packet contains the trigger string, no packet matches. The destination uses TCP sequence numbers to reassemble the stream into the original 'root' bytes. To catch the attack, the filter has to do the same reassembly — keeping per-connection state, buffering out-of-order segments, applying the match against the reconstructed stream. That's exactly the job stateful filters are built for, but it's expensive at scale.",
+      "distractorAnalysis": {
+        "B": "Checksums aren't relevant; the bytes themselves don't change.",
+        "C": "TCP doesn't encrypt anything by default.",
+        "D": "The filter sees every packet — it just can't make sense of any individual one."
+      },
+      "trapCategories": ["evasion-mechanism", "tcp-reassembly"],
+      "diagramRef": "lecture-14-tcp-split-evasion",
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q23",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Subverting packet filters — TTL manipulation",
+      "stem": "Suppose a destination server is 22 hops away and the firewall sits 16 hops in. The attacker sends pairs of packets: one with TTL=22 (reaches the server) and one with TTL=16 (expires before reaching the server) sharing each sequence number, but with different content. Why does this defeat even a stateful filter?",
+      "choices": [
+        { "id": "A", "text": "TTL is encrypted and the filter can't read it." },
+        { "id": "B", "text": "The firewall and the destination see different streams: the firewall sees both packets and may inspect the TTL=16 (decoy) version, while only the TTL=22 version actually reaches the destination. The filter can't know which packets the destination will receive without simulating routing, and storing all combinations is exponential." },
+        { "id": "C", "text": "Stateful filters don't track TTL at all." },
+        { "id": "D", "text": "TTL manipulation only affects UDP." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The attack exploits the gap between what the filter inspects and what the destination assembles. By sending dual packets with different TTLs, the attacker forces a divergence: the filter sees, say, decoy bytes 'n c e ?' for sequence numbers 4-7, while the destination — receiving only the high-TTL packets — assembles 'r o o t.' The filter can't predict TTL behavior without modeling every router on the path, and tracking all possible combinations of which packet 'wins' for each sequence number is exponential.",
+      "distractorAnalysis": {
+        "A": "TTL is in the cleartext IP header.",
+        "C": "Some stateful filters do consider TTL, but the attack still works because predicting expiration requires routing knowledge.",
+        "D": "TTL is an IP-layer field; the attack works for both TCP and UDP, and the lecture's example uses TCP."
+      },
+      "trapCategories": ["evasion-mechanism", "filter-vs-endpoint-divergence"],
+      "diagramRef": "lecture-14-ttl-evasion",
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q24",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Proxy firewalls",
+      "stem": "How does a proxy firewall differ structurally from a packet-filtering firewall, and what advantage does this give it against TTL/split-payload evasion?",
+      "choices": [
+        { "id": "A", "text": "A proxy forwards individual packets faster than a packet filter." },
+        { "id": "B", "text": "A proxy terminates one TCP connection from the outside and opens a separate TCP connection to the inside — it sees a clean reassembled byte stream on each side and is not subject to the packet-level reassembly games that defeat packet filters." },
+        { "id": "C", "text": "A proxy uses encryption to validate packet contents." },
+        { "id": "D", "text": "A proxy operates without any TCP state at all." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A proxy firewall isn't really filtering packets — it's a man-in-the-middle that terminates the outside connection and opens a fresh inside connection. Each side sees an ordered byte stream from a properly maintained TCP endpoint. There's no TTL trickery to exploit because the proxy reads the bytes the way the application would, and writes its own packets with its own TTLs to the destination. This eliminates the entire family of packet-level evasion attacks at the cost of being slower and having to terminate every connection.",
+      "distractorAnalysis": {
+        "A": "Proxies are slower than packet filters per byte.",
+        "C": "Encryption isn't the mechanism.",
+        "D": "Proxies maintain extensive TCP state — that's the whole point."
+      },
+      "trapCategories": ["mechanism-test", "proxy-vs-filter"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L14-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "VPN tunneling",
+      "stem": "From the firewall's perspective, why does a VPN potentially bypass the security policy, and what design decision does this force the operator to make?",
+      "choices": [
+        { "id": "A", "text": "VPNs route around the firewall entirely, so the firewall never sees them." },
+        { "id": "B", "text": "VPN traffic is allowed by the firewall as a single encrypted flow, but inside that flow can be arbitrary internal-network traffic — so allowing VPN means trusting the VPN endpoint to enforce policy on tunneled traffic. The operator must decide who they trust to operate VPN endpoints." },
+        { "id": "C", "text": "VPNs only work over UDP and most firewalls block UDP." },
+        { "id": "D", "text": "VPNs require disabling the firewall entirely." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A VPN is an encrypted tunnel that the firewall sees as one outer flow. The firewall can decide whether to allow VPN traffic at all, but it cannot inspect the inner traffic. So if VPN is allowed, the policy enforcement is delegated to whoever operates the VPN endpoint — typically the user's own device. This creates the 'insider' trust model the lecture warns about: a compromised laptop tunneling into the corporate network gives the attacker the same access as if they were sitting inside.",
+      "distractorAnalysis": {
+        "A": "VPNs do go through the firewall — they just hide their inner content from it.",
+        "C": "VPNs run over both TCP and UDP and are widely permitted.",
+        "D": "VPNs coexist with firewalls; disabling the firewall is not required."
+      },
+      "trapCategories": ["synthesis", "trust-boundary", "insider-threat"],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

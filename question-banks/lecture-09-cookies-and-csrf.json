@@ -1,0 +1,607 @@
+{
+  "lectureId": "lecture-09-cookies-and-csrf",
+  "lectureTitle": "Cookies and CSRF",
+  "lectureNumber": 9,
+  "topics": [
+    "Same-Origin Policy (SOP)",
+    "SOP Exceptions",
+    "Cookie Definition and Lifecycle",
+    "Cookie Attributes",
+    "Cookie Policy: Setting",
+    "Cookie Policy: Sending",
+    "Session Tokens",
+    "Cross-Site Request Forgery (CSRF)",
+    "CSRF GET vs POST",
+    "CSRF Tokens",
+    "Referer Header Validation",
+    "SameSite Cookie Attribute",
+    "Cookie Ambiguity",
+    "Spectre and Site Isolation"
+  ],
+  "questions": [
+    {
+      "id": "L09-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Same-Origin Policy (SOP)",
+      "stem": "What does the Same-Origin Policy primarily prevent?",
+      "choices": [
+        {"id": "A", "text": "One website from reading or tampering with data belonging to another website with a different origin."},
+        {"id": "B", "text": "Servers from logging client IP addresses."},
+        {"id": "C", "text": "Users from visiting more than one website per session."},
+        {"id": "D", "text": "The use of cookies entirely."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 7: SOP is enforced by the browser to isolate origins. A script in one page may access data in a second page only if both pages share an origin.",
+      "distractorAnalysis": {
+        "B": "**Wrong Domain** — Server-side logging is unrelated to SOP.",
+        "C": "**Wrong Concept** — SOP governs cross-origin script access, not navigation.",
+        "D": "**Wrong Mechanism** — SOP and cookie policy are separate policies."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Same-Origin Policy (SOP)",
+      "stem": "Two URLs share the same origin if and only if which fields match exactly (string-equal)?",
+      "choices": [
+        {"id": "A", "text": "Protocol, domain, and path."},
+        {"id": "B", "text": "Protocol, domain, and port."},
+        {"id": "C", "text": "Domain only."},
+        {"id": "D", "text": "Protocol and port only."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 9: 'protocol, domain, and port strings must be equal.' Path and query are NOT part of origin.",
+      "distractorAnalysis": {
+        "A": "**Wrong Triple** — Path is not part of the origin.",
+        "C": "**Too Loose** — Subdomain mismatches break origin equality (cci.charlotte.edu vs charlotte.edu).",
+        "D": "**Missing Domain** — Domain mismatch (a.com vs b.com) clearly breaks origin."
+      },
+      "trapCategories": [
+        "definition-match",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q03",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "SOP Exceptions",
+      "stem": "If `https://test.com` includes `<script src=\"https://google.com/lib.js\">`, what origin does the loaded JavaScript run with?",
+      "choices": [
+        {"id": "A", "text": "https://google.com — the origin of the script's URL."},
+        {"id": "B", "text": "https://test.com — the origin of the page that loaded it (test.com effectively 'copy-pasted' the JS into its page)."},
+        {"id": "C", "text": "about:blank — scripts have no origin."},
+        {"id": "D", "text": "The intersection of both origins; neither's data is accessible."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 10: cross-origin script files run with the *embedding* page's origin. This is exactly why third-party JS inclusion is so dangerous — the included script gets full access to the embedder's data.",
+      "distractorAnalysis": {
+        "A": "**Common Misconception** — Intuitive but wrong; SOP makes scripts adopt the embedder's origin, not the source URL's.",
+        "C": "**False** — Executing JS always has an associated origin.",
+        "D": "**Fabrication** — There is no 'intersection' rule; origin is single-valued."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q04",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "SOP Exceptions",
+      "stem": "Which of the following is *NOT* a SOP exception listed on slide 10?",
+      "choices": [
+        {"id": "A", "text": "Websites can fetch and display images from other origins (without manipulating pixel data)."},
+        {"id": "B", "text": "CORS lets two origins agree on limited sharing."},
+        {"id": "C", "text": "The postMessage JS API allows controlled cross-origin messaging."},
+        {"id": "D", "text": "JavaScript may freely read cookies from any origin if requested politely."}
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "SOP and cookie policy explicitly forbid cross-origin cookie reads. The other three are real, documented exceptions on slide 10.",
+      "distractorAnalysis": {
+        "A": "**Real Exception** — Image loading is allowed; pixel access is not.",
+        "B": "**Real Exception** — CORS is the canonical opt-in cross-origin sharing mechanism.",
+        "C": "**Real Exception** — postMessage is the documented JS bridge between origins."
+      },
+      "trapCategories": [
+        "not-listed"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Cookie Definition and Lifecycle",
+      "stem": "What is a cookie?",
+      "choices": [
+        {"id": "A", "text": "A piece of data used to maintain state across multiple HTTP requests, set by server or browser and stored client-side."},
+        {"id": "B", "text": "A type of HTTP method like GET or POST."},
+        {"id": "C", "text": "A server-side database row indexed by user ID."},
+        {"id": "D", "text": "An encrypted hash of a session."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 14: cookies are name–value pairs the browser stores and automatically attaches on relevant requests, used by servers to customize responses and connect related requests across HTTP's stateless model.",
+      "distractorAnalysis": {
+        "B": "**Wrong Layer** — Cookies are headers, not methods.",
+        "C": "**Wrong Storage** — Cookies live in the browser, not the server's database.",
+        "D": "**Wrong Format** — Cookies are arbitrary strings; encryption is not required."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q06",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Cookie Attributes",
+      "stem": "If a cookie has `Secure=True`, what does the browser do?",
+      "choices": [
+        {"id": "A", "text": "Encrypts the cookie's value at rest."},
+        {"id": "B", "text": "Only sends the cookie over HTTPS connections; plain HTTP requests will not include it."},
+        {"id": "C", "text": "Hides the cookie from the user in DevTools."},
+        {"id": "D", "text": "Signs the cookie with a server-issued key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 17: Secure restricts *transmission* to HTTPS. The cookie value at rest in the browser is unchanged; this flag governs the channel.",
+      "distractorAnalysis": {
+        "A": "**Wrong Action** — Secure does not encrypt the cookie at rest.",
+        "C": "**False** — DevTools still shows Secure cookies.",
+        "D": "**Fabrication** — No automatic signing is implied."
+      },
+      "trapCategories": [
+        "definition-match",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q07",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Cookie Attributes",
+      "stem": "What does `HttpOnly=True` on a cookie prevent?",
+      "choices": [
+        {"id": "A", "text": "Sending the cookie over HTTPS."},
+        {"id": "B", "text": "JavaScript running in the browser from reading or modifying the cookie via document.cookie."},
+        {"id": "C", "text": "The server from setting the cookie."},
+        {"id": "D", "text": "The cookie from being sent on POST requests."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 17: HttpOnly stops in-page JS from accessing the cookie — a key defense against session-token theft via XSS.",
+      "distractorAnalysis": {
+        "A": "**Wrong Flag** — That would be the inverse of Secure; HttpOnly is unrelated to HTTPS.",
+        "C": "**False** — Servers freely set HttpOnly cookies.",
+        "D": "**Fabrication** — HttpOnly does not restrict by HTTP method."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q08",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Cookie Policy: Setting",
+      "stem": "Server `mail.google.com` issues a Set-Cookie header with `Domain=com`. What happens?",
+      "choices": [
+        {"id": "A", "text": "Allowed — `com` is a valid suffix of the server's domain."},
+        {"id": "B", "text": "Rejected — `com` is a top-level domain (TLD); cookie policy forbids setting cookies on TLDs."},
+        {"id": "C", "text": "Allowed — but the cookie expires immediately."},
+        {"id": "D", "text": "Allowed — but only for HTTPS requests."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 24: Y must be a domain suffix of X *and* not a TLD. Without the TLD ban, mail.google.com could plant cookies that the browser would attach to *every* .com site — catastrophic cross-site contamination.",
+      "distractorAnalysis": {
+        "A": "**Suffix Trap** — Suffix-match alone is insufficient; the TLD ban is the second rule.",
+        "C": "**Wrong Failure Mode** — Expiry is not the issue.",
+        "D": "**Wrong Flag** — Secure flag is independent."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q09",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Cookie Policy: Setting",
+      "stem": "Which of the following is a *valid* Set-Cookie under cookie policy?",
+      "choices": [
+        {"id": "A", "text": "Server `mail.google.com` sets `Domain=google.com`."},
+        {"id": "B", "text": "Server `evil.com` sets `Domain=google.com`."},
+        {"id": "C", "text": "Server `google.com` sets `Domain=com`."},
+        {"id": "D", "text": "Server `mail.google.com` sets `Domain=mail.evil.com`."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Y=google.com is a domain suffix of X=mail.google.com, and google.com is not a TLD — both rules of slide 24 are satisfied.",
+      "distractorAnalysis": {
+        "B": "**Suffix Violation** — evil.com is not a suffix of google.com.",
+        "C": "**TLD Violation** — com is a TLD; rule violated.",
+        "D": "**Suffix Violation** — mail.evil.com is not a suffix of mail.google.com."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q10",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Cookie Policy: Sending",
+      "stem": "A cookie has `Domain=charlotte.edu`, `Path=/academics`. Will the browser send it on a request to `https://cci.charlotte.edu/academics/sis-faculty`?",
+      "choices": [
+        {"id": "A", "text": "Yes — `charlotte.edu` is a domain suffix of `cci.charlotte.edu` and `/academics` is a path prefix of the request path."},
+        {"id": "B", "text": "No — the request URL must exactly match the cookie's Domain+Path."},
+        {"id": "C", "text": "No — the cookie's Domain is broader than the server's."},
+        {"id": "D", "text": "Only over HTTPS, regardless of suffix/prefix."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slides 25–26: cookie Domain must be a *suffix* of the server domain (✓ charlotte.edu suffix of cci.charlotte.edu) AND cookie Path must be a *prefix* of the server path (✓ /academics prefix of /academics/sis-faculty).",
+      "distractorAnalysis": {
+        "B": "**Wrong Rule** — Suffix/prefix matching is the rule, not exact match.",
+        "C": "**Reversed** — A broader Domain is precisely what suffix-match allows.",
+        "D": "**Different Flag** — Secure is not specified in this scenario."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Session Tokens",
+      "stem": "What is a session token?",
+      "choices": [
+        {"id": "A", "text": "A user's hashed password sent on every request."},
+        {"id": "B", "text": "A randomly generated secret value the server issues after authentication; the browser attaches it on subsequent requests so the server can identify the user without re-prompting credentials."},
+        {"id": "C", "text": "The user's IP address used as identity."},
+        {"id": "D", "text": "A public key signed by the server."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 30: session tokens replace per-request password entry. Servers must generate them randomly and securely; browsers must protect them via cookie policy + SOP.",
+      "distractorAnalysis": {
+        "A": "**Wrong Mechanism** — Sending a password on every request would be insecure and unnecessary.",
+        "C": "**Wrong Identity Model** — IP-based identity is unreliable and not session-token semantics.",
+        "D": "**Wrong Mechanism** — Public-key authentication is a different scheme."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q12",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Session Tokens",
+      "stem": "Slide 33: which combination of attributes is *recommended* for a session-token cookie?",
+      "choices": [
+        {"id": "A", "text": "`Secure=False`, `HttpOnly=False`, `Expires=never`."},
+        {"id": "B", "text": "`Secure=True`, `HttpOnly=True`, `Expires=session-timeout`, with Domain/Path scoped to authenticated endpoints."},
+        {"id": "C", "text": "`Domain=com`, `Secure=False`."},
+        {"id": "D", "text": "No attributes at all; rely on defaults."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Secure stops over-the-wire theft on HTTP; HttpOnly stops XSS-based theft; tight Domain/Path limits exposure surface; short expiry shrinks the theft window.",
+      "distractorAnalysis": {
+        "A": "**Disables Defenses** — Both major theft defenses turned off.",
+        "C": "**Illegal Domain** — Domain=com is forbidden (TLD).",
+        "D": "**Insecure Defaults** — Defaults invite session theft."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Cross-Site Request Forgery (CSRF)",
+      "stem": "What is the core idea behind a CSRF attack?",
+      "choices": [
+        {"id": "A", "text": "The attacker steals the victim's password from a phishing page."},
+        {"id": "B", "text": "The attacker tricks the victim's browser into making an unintended authenticated request to a target server, which trusts it because the browser auto-attaches the session cookie."},
+        {"id": "C", "text": "The attacker installs malware on the victim's machine."},
+        {"id": "D", "text": "The attacker impersonates the server with a fake TLS certificate."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 36: CSRF exploits the browser's automatic cookie attachment. The attacker doesn't read the cookie — they cause a request that goes out *with* the cookie attached, and the server can't tell.",
+      "distractorAnalysis": {
+        "A": "**Wrong Attack** — CSRF doesn't require credential theft.",
+        "C": "**Wrong Class** — Malware-on-host is a different attack.",
+        "D": "**Wrong Class** — TLS impersonation is MITM/cert-spoofing, not CSRF."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q14",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "CSRF GET vs POST",
+      "stem": "Slide 42: how can an attacker cause a victim's browser to issue a CSRF *GET* request without any user click?",
+      "choices": [
+        {"id": "A", "text": "Embed `<img src=\"https://www.bank.com/transfer?amount=100&to=Mallory\">` on a page the victim visits — the browser auto-fetches the URL with bank.com's cookies attached."},
+        {"id": "B", "text": "Send the victim a physical letter."},
+        {"id": "C", "text": "Run a SQL injection against the victim's browser."},
+        {"id": "D", "text": "Force the victim to disable JavaScript."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The browser auto-fetches every img URL and attaches cookies for that domain. The image will fail to render, but the GET hits the bank server with the victim's session cookie still attached.",
+      "distractorAnalysis": {
+        "B": "**Wrong Channel** — Out-of-band social engineering isn't browser-level CSRF.",
+        "C": "**Wrong Target** — SQL injection targets databases, not browsers.",
+        "D": "**Backwards** — Disabling JS doesn't help an attacker who needs the browser to send the request."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q15",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CSRF GET vs POST",
+      "stem": "Why can a simple `<a href=...>` link not directly forge a CSRF *POST* request?",
+      "choices": [
+        {"id": "A", "text": "Clicking a link issues a GET, not a POST. To forge a POST, the attacker typically needs JavaScript or a hidden auto-submitting form on a page the victim loads."},
+        {"id": "B", "text": "Browsers refuse to follow links with form parameters."},
+        {"id": "C", "text": "POST requests cannot carry cookies."},
+        {"id": "D", "text": "The Same-Origin Policy blocks all POST requests."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 43: link clicks are GET-only. To produce a POST automatically, the attacker hosts a page that runs JS or auto-submits a form, which the victim's browser executes when they visit.",
+      "distractorAnalysis": {
+        "B": "**Fabrication** — Browsers happily follow links with query strings.",
+        "C": "**False** — POSTs include cookies just like GETs.",
+        "D": "**Wrong Scope** — SOP allows form submissions cross-origin (slide 44 explicitly notes this is why SOP alone doesn't stop CSRF)."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q16",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "CSRF Tokens",
+      "stem": "Slide 49 says CSRF tokens *cannot* be sent to the server in a cookie. Why?",
+      "choices": [
+        {"id": "A", "text": "Cookies are stateless and cannot carry tokens."},
+        {"id": "B", "text": "The browser would auto-attach the CSRF cookie to *every* request to that domain — including the attacker's forged request — defeating the defense entirely."},
+        {"id": "C", "text": "Cookies are encrypted at the boundary and the server cannot read them."},
+        {"id": "D", "text": "Cookie values cannot exceed 8 bytes."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The whole point of a CSRF token is to be *something the attacker can't include*. If it auto-attaches via cookies, the attacker gets it for free. Tokens must travel in headers, query parameters, or POST body — places SOP prevents attacker.com's JS from reading or writing on the victim's behalf.",
+      "distractorAnalysis": {
+        "A": "**False** — Cookies routinely carry tokens (session tokens *are* tokens).",
+        "C": "**False** — Cookies aren't encrypted at the server boundary.",
+        "D": "**Fabrication** — No 8-byte limit exists."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q17",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CSRF Tokens",
+      "stem": "How does a CSRF token defend against a forged form POST?",
+      "choices": [
+        {"id": "A", "text": "The legitimate server includes a per-session/per-form secret as a hidden field; the attacker's JS on evil.com cannot read the victim's HTML (SOP), so it cannot embed a valid token in its forged form."},
+        {"id": "B", "text": "The token encrypts the form payload."},
+        {"id": "C", "text": "The token rate-limits requests from the user."},
+        {"id": "D", "text": "The token is the user's password sent in a different field."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The attacker can fetch their *own* token, but it's bound to the attacker's session, not the victim's. Without reading the victim's HTML (blocked by SOP), the attacker cannot embed a valid victim-token.",
+      "distractorAnalysis": {
+        "B": "**Wrong Mechanism** — CSRF tokens are not encryption keys.",
+        "C": "**Wrong Control** — Rate-limiting is a separate defense.",
+        "D": "**Bad Practice** — Passwords are not repurposed as CSRF tokens."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q18",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Referer Header Validation",
+      "stem": "How does Referer-header validation defend against CSRF?",
+      "choices": [
+        {"id": "A", "text": "The server checks that the Referer header matches an expected same-site URL and rejects requests with cross-site Referers."},
+        {"id": "B", "text": "The server logs the Referer for forensic purposes only — no rejection."},
+        {"id": "C", "text": "The server signs the Referer header before responding."},
+        {"id": "D", "text": "The server blocks the Referer header from leaving the browser."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 53: a request with Referer=evil.com hitting bank.com/transfer is clearly cross-site and can be refused. Same-site requests pass.",
+      "distractorAnalysis": {
+        "B": "**Not a Defense** — Logging without enforcement doesn't block the attack.",
+        "C": "**Wrong Direction** — Servers don't sign request headers.",
+        "D": "**Wrong Actor** — Browsers control Referer transmission, not servers."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q19",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Advanced",
+      "topic": "Referer Header Validation",
+      "stem": "Slide 54 lists practical issues with Referer-based CSRF defense. Which is *NOT* listed as an issue?",
+      "choices": [
+        {"id": "A", "text": "The Referer header may leak private information (e.g., internal URL paths)."},
+        {"id": "B", "text": "Firewalls or browser privacy settings may strip the header."},
+        {"id": "C", "text": "The header is optional; missing-header requests create an 'allow vs deny' dilemma."},
+        {"id": "D", "text": "The Referer header is encrypted by default and unreadable by the server."}
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "The Referer is a plain HTTP header, not encrypted (beyond TLS in transit, which the server terminates). Slide 54 lists privacy leakage, header stripping, and the missing-header dilemma — but not encryption.",
+      "distractorAnalysis": {
+        "A": "**Listed** — Privacy leakage is the first issue on slide 54.",
+        "B": "**Listed** — Firewall/privacy stripping is on slide 54.",
+        "C": "**Listed** — The fail-safe-defaults dilemma is on slide 54."
+      },
+      "trapCategories": [
+        "not-listed",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q20",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "SameSite Cookie Attribute",
+      "stem": "What does `SameSite=Strict` on a cookie do?",
+      "choices": [
+        {"id": "A", "text": "The browser will not send the cookie if the cookie's domain does not match the origin domain of the page making the request — blocking the cookie on cross-site requests."},
+        {"id": "B", "text": "It encrypts the cookie's value."},
+        {"id": "C", "text": "It restricts the cookie to a single browser tab."},
+        {"id": "D", "text": "It prevents the server from updating the cookie."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 55: `SameSite=Strict` makes the cookie a same-site-only cookie. evil.com's request to bank.com will not carry bank.com's session cookie — closing the CSRF channel for that cookie.",
+      "distractorAnalysis": {
+        "B": "**Wrong Mechanism** — SameSite is not encryption.",
+        "C": "**Wrong Scope** — Cookie scoping is not tab-bound.",
+        "D": "**Wrong Behavior** — Set-Cookie still works; SameSite governs *sending* on cross-site requests."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q21",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Cookie Ambiguity",
+      "stem": "Slide 61: two cookies `name=value1; Domain=bank.com; Path=/` and `name=value2; Domain=bank.com; Path=/page` both apply to `bank.com/page`. What problem arises?",
+      "choices": [
+        {"id": "A", "text": "The browser deletes both cookies on conflict."},
+        {"id": "B", "text": "The server receives both cookies in undefined order, and because Domain/Path attributes are *not* sent to the server, it cannot reliably distinguish them by their original scoping."},
+        {"id": "C", "text": "Only the most recently created cookie is sent."},
+        {"id": "D", "text": "The two cookies are merged into a single concatenated value."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The server sees `name=value1; name=value2` (or value2; value1). It receives no Domain/Path metadata, and the order is unspecified. Authoring two same-name cookies with different scopes is a footgun.",
+      "distractorAnalysis": {
+        "A": "**Wrong Behavior** — Browsers don't auto-delete on conflict.",
+        "C": "**Wrong Rule** — Recency is not the rule.",
+        "D": "**Wrong Behavior** — No automatic merging happens."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q22",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Spectre and Site Isolation",
+      "stem": "Spectre (slides 63–65) exploits which combination?",
+      "choices": [
+        {"id": "A", "text": "Chrome's old per-tab process model + branch-prediction speculative execution + a microarchitectural side channel (cache/timing) to leak data across origins sharing one process."},
+        {"id": "B", "text": "A bug in TLS 1.3 handshake."},
+        {"id": "C", "text": "A misconfigured Referer header on a cross-site request."},
+        {"id": "D", "text": "A flaw in BLP's star-property."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "When evil.com and victim.com share an OS process (old Chrome model), only the JS engine separated them. Spectre uses speculation past a bounds check + a cache-timing side channel to leak victim-origin memory. Defense: site isolation (each origin in its own OS process).",
+      "distractorAnalysis": {
+        "B": "**Wrong Vehicle** — TLS is not the channel.",
+        "C": "**Wrong Class** — Referer is a CSRF concept, not Spectre.",
+        "D": "**Wrong Domain** — BLP is unrelated to browser microarchitecture."
+      },
+      "trapCategories": [
+        "synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L09-Q23",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Spectre and Site Isolation",
+      "stem": "What is the deployed mitigation for Spectre in modern Chrome and Firefox?",
+      "choices": [
+        {"id": "A", "text": "Disable cookies entirely."},
+        {"id": "B", "text": "*Site Isolation* — run each origin in its own OS process so cross-origin speculation cannot reach the other origin's memory; the OS sandbox now enforces the boundary."},
+        {"id": "C", "text": "Encrypt all JavaScript before execution."},
+        {"id": "D", "text": "Disable speculative execution at the OS level."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 66: Chrome and Firefox now run each origin in its own process. The OS sandbox separates evil.com and victim.com; the speculative-execution channel cannot reach across processes without a much harder OS escape. Cost: memory and process-switch overhead.",
+      "distractorAnalysis": {
+        "A": "**Wrong Defense** — Disabling cookies doesn't address Spectre.",
+        "C": "**Not Deployable** — Encrypting JS isn't a real defense.",
+        "D": "**Too Costly** — Browsers don't disable speculation; they isolate origins instead."
+      },
+      "trapCategories": [
+        "definition-match",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

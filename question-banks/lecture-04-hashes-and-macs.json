@@ -1,0 +1,543 @@
+{
+  "lectureId": "lecture-04-hashes-and-macs",
+  "lectureTitle": "Cryptographic Hashes and MACs",
+  "lectureNumber": 4,
+  "topics": [
+    "Hash Function Definition",
+    "Preimage Resistance",
+    "Collision Resistance",
+    "Birthday Attack",
+    "Hash Function Examples",
+    "Length Extension Attacks",
+    "Hashes and Integrity",
+    "MAC Definition",
+    "EU-CPA Game",
+    "NMAC Construction",
+    "HMAC Construction",
+    "HMAC Properties",
+    "MACs and Confidentiality",
+    "Authenticated Encryption Definition",
+    "MAC-then-Encrypt vs Encrypt-then-MAC",
+    "Lucky 13 Attack",
+    "AEAD",
+    "GCM Mode",
+    "GCM Misuse"
+  ],
+  "questions": [
+    {
+      "id": "L04-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Hash Function Definition",
+      "stem": "A cryptographic hash function $H(M)$ takes an arbitrary-length input and produces a fixed-length output. Which property captures the \"random oracle\" intuition mentioned in the slides?",
+      "choices": [
+        {"id": "A", "text": "Hashing the same input always produces the same output."},
+        {"id": "B", "text": "Changing one bit of input causes the output to be completely different and unpredictable."},
+        {"id": "C", "text": "Hashing is reversible given enough computation."},
+        {"id": "D", "text": "Hashing always doubles the input size."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The random-oracle intuition is that the hash output behaves as if drawn uniformly at random per input — single-bit changes produce avalanche-style, unpredictable output differences. Determinism (A) is also a property but not the random-oracle one.",
+      "distractorAnalysis": {
+        "A": "**Different Property** — That is the determinism/correctness property, not the random-oracle one.",
+        "C": "**Opposite** — Hashes are explicitly one-way and not reversible.",
+        "D": "**False** — Output size is fixed and typically much smaller than input."
+      },
+      "trapCategories": [
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Preimage Resistance",
+      "stem": "Slide 7 defines one-wayness: given $y$, it is infeasible to find any $x$ with $H(x) = y$. The slide then asks whether $H(x) = 1$ (the constant function) is one-way. Why is the answer no?",
+      "choices": [
+        {"id": "A", "text": "Because the output is too small to be secure."},
+        {"id": "B", "text": "Because given $y = 1$, the attacker can return any $x$ at all and it will hash to $y$ trivially — the requirement is to find *any* preimage, not the original one."},
+        {"id": "C", "text": "Because constant functions are not deterministic."},
+        {"id": "D", "text": "Because the function has too many collisions."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Preimage resistance requires that finding *any* preimage be infeasible. The constant function maps everything to 1, so any input is a valid preimage — trivially defeating the property.",
+      "distractorAnalysis": {
+        "A": "**Misleading Heuristic** — Output size matters for collision resistance, but the formal failure here is the trivial preimage.",
+        "C": "**False** — A constant function is the most deterministic function imaginable.",
+        "D": "**Adjacent but Wrong** — Many collisions are a *consequence* of the failure; the *direct* reason is trivial preimage finding."
+      },
+      "trapCategories": [
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Collision Resistance",
+      "stem": "Slide 8 says: \"Can we design a hash function with no collisions?\" The answer is no. What is the precise reason?",
+      "choices": [
+        {"id": "A", "text": "Because hash functions are computationally bounded."},
+        {"id": "B", "text": "Because the input space is larger than the output space (pigeonhole principle), so multiple inputs must share an output."},
+        {"id": "C", "text": "Because attackers can always brute-force the hash."},
+        {"id": "D", "text": "Because deterministic functions cannot be one-way."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Hash functions map arbitrary-length inputs to fixed $n$-bit outputs. There are infinitely many inputs but only $2^n$ outputs, so by the pigeonhole principle, collisions exist. The cryptographic goal is making them infeasible to find.",
+      "distractorAnalysis": {
+        "A": "**Irrelevant Limit** — Bounded computation is unrelated to existence of collisions.",
+        "C": "**Capability vs. Existence** — Brute-force ability is a separate concern from whether collisions exist.",
+        "D": "**False Claim** — Determinism and one-wayness are compatible."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Birthday Attack",
+      "stem": "Why does finding a collision on an $n$-bit hash require only $\\approx 2^{n/2}$ tries on average instead of $\\approx 2^n$?",
+      "choices": [
+        {"id": "A", "text": "Because the attacker can run the hash backward halfway."},
+        {"id": "B", "text": "Because of the birthday paradox: when sampling random values from a space of size $2^n$, you expect a collision after $\\approx 2^{n/2}$ samples due to quadratic pair growth."},
+        {"id": "C", "text": "Because preimage resistance is strictly weaker than collision resistance."},
+        {"id": "D", "text": "Because hash functions are linear in their inputs."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Among $k$ samples from a space of size $N$, there are $\\binom{k}{2} \\approx k^2/2$ pairs. A collision becomes likely when $k^2/2 \\approx N$, i.e., $k \\approx \\sqrt{N} = 2^{n/2}$. This is why SHA-256 (256-bit output) gives only ~128 bits of collision security.",
+      "distractorAnalysis": {
+        "A": "**False Mechanism** — Hashes are not invertible.",
+        "C": "**True but Unrelated** — The relative strength comparison doesn't explain the $2^{n/2}$ bound.",
+        "D": "**False** — Hashes are explicitly nonlinear."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q05",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Hash Function Examples",
+      "stem": "Slide 10 lists hash functions and their security status. Which statement is correct?",
+      "choices": [
+        {"id": "A", "text": "MD5 is currently the recommended standard."},
+        {"id": "B", "text": "SHA-1 was completely broken in 2017 and should not be used."},
+        {"id": "C", "text": "SHA-3 (Keccak) is meant to replace SHA-2."},
+        {"id": "D", "text": "All variants of SHA-2 are vulnerable to length extension attacks."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "SHA-1 was practically broken in 2017 (Google's SHAttered collision). MD5 was broken even earlier. Both are deprecated.",
+      "distractorAnalysis": {
+        "A": "**False** — MD5 is completely broken.",
+        "C": "**False** — SHA-3 is an alternative construction (sponge), not a replacement for SHA-2; both remain standards.",
+        "D": "**Overstatement** — SHA-256 (a specific SHA-2 variant) is vulnerable to length extension; not all variants behave identically (e.g., truncated SHA-512 variants resist it)."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q06",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Length Extension Attacks",
+      "stem": "Length extension lets an attacker compute $H(x \\| m)$ given $H(x)$ and the length of $x$, without knowing $x$. Mechanistically, why does this attack work on Merkle-Damgård hashes (MD5, SHA-1, SHA-256) but not on SHA-3?",
+      "choices": [
+        {"id": "A", "text": "Because SHA-3 uses a smaller block size."},
+        {"id": "B", "text": "Because Merkle-Damgård hashes expose their internal state as the output, allowing the attacker to resume hashing from $H(x)$, while SHA-3's sponge construction absorbs and squeezes through a hidden capacity."},
+        {"id": "C", "text": "Because SHA-3 uses asymmetric keys internally."},
+        {"id": "D", "text": "Because length extension only affects 128-bit hashes."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Merkle-Damgård's final state *is* the output. An attacker who knows $H(x)$ knows the chaining state and can append more blocks. SHA-3's sponge keeps a hidden internal capacity unrelated to the output, blocking the extension.",
+      "distractorAnalysis": {
+        "A": "**Incidental Difference** — Block size doesn't determine length-extension vulnerability.",
+        "C": "**False** — SHA-3 is a hash, not asymmetric crypto.",
+        "D": "**False** — Length extension is independent of output size."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q07",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Hashes and Integrity",
+      "stem": "Mozilla publishes a Firefox installer with its hash on https://mozilla.org. Alice downloads the installer and verifies its hash. Under which threat model do hashes provide integrity here?",
+      "choices": [
+        {"id": "A", "text": "Hashes always provide integrity, regardless of threat model."},
+        {"id": "B", "text": "Hashes provide integrity only if the published hash channel is itself secure (e.g., the website's TLS certificate is valid and the page wasn't tampered with)."},
+        {"id": "C", "text": "Hashes provide integrity only against passive eavesdroppers like Eve."},
+        {"id": "D", "text": "Hashes never provide integrity; they only confirm download completeness."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Hashes are unkeyed functions: anyone can compute a hash on any value. Integrity therefore depends entirely on the attacker being unable to modify the published reference hash. If Mallory can replace both the binary and the hash, hashing alone provides no integrity.",
+      "distractorAnalysis": {
+        "A": "**Absolutist Trap** — The whole point of Slides 12-14 is that hash integrity is threat-model-dependent.",
+        "C": "**Wrong Distinction** — The relevant attacker is anyone who can modify the hash, not the threat type.",
+        "D": "**Overstatement** — Hashes do provide integrity in the right threat model."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q08",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "MAC Definition",
+      "stem": "A MAC takes a key $K$ and message $M$ and produces a tag $T$. Which property is the *defining* security goal of a MAC?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality of $M$."},
+        {"id": "B", "text": "Existential unforgeability under chosen-plaintext attack (EU-CPA): an attacker without $K$ cannot produce a valid tag on any new message."},
+        {"id": "C", "text": "Indistinguishability from random for the tag."},
+        {"id": "D", "text": "Reversibility from $T$ back to $M$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "MACs solve integrity/authenticity, not confidentiality. The security definition (Slide 20) is EU-CPA: even after seeing tags on chosen messages, the attacker cannot forge a tag on a new message.",
+      "distractorAnalysis": {
+        "A": "**Wrong Goal** — MACs do not provide confidentiality (Slide 26).",
+        "C": "**Adjacent Property** — Tag pseudorandomness is a *consequence* in many constructions, not the defining goal.",
+        "D": "**Backward** — MACs are not invertible; recovering $M$ from $T$ is impossible by design."
+      },
+      "trapCategories": [
+        "category-error",
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q09",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "EU-CPA Game",
+      "stem": "In the EU-CPA game (Slide 21), Mallory queries Alice for $\\text{MAC}(K, M_i)$ on messages of her choosing, then outputs $(M', T')$. What are the precise conditions for Mallory to win?",
+      "choices": [
+        {"id": "A", "text": "$M'$ must be one of the $M_i$ Mallory previously queried."},
+        {"id": "B", "text": "$M'$ must be a new message (not previously queried) and $T'$ must be a valid tag for $M'$ under $K$."},
+        {"id": "C", "text": "$T'$ must equal $K$."},
+        {"id": "D", "text": "Mallory must guess the bit $b$ in a coin flip."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Mallory wins by *forging* — producing a tag on a *new* message she has not previously requested. Replaying an old (M, T) pair doesn't count. There is no coin flip in EU-CPA.",
+      "distractorAnalysis": {
+        "A": "**Inverted Rule** — Replays don't count as forgery.",
+        "C": "**Wrong Goal** — Recovering the key isn't the win condition.",
+        "D": "**Game Confusion** — That's IND-CPA, not EU-CPA."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "NMAC Construction",
+      "stem": "NMAC is defined as $H(K_1 \\| H(K_2 \\| M))$. Why does using two hash invocations defeat the length-extension attack that a naive $H(K \\| M)$ would suffer?",
+      "choices": [
+        {"id": "A", "text": "Because $H$ is applied twice, doubling the security level."},
+        {"id": "B", "text": "Because the inner hash $H(K_2 \\| M)$ produces a fixed-length output, and the outer $H(K_1 \\| \\cdot)$ prevents extension since extensions to $H(K_2 \\| M)$ would require knowing $K_1$ to forge the outer hash."},
+        {"id": "C", "text": "Because two keys provide a longer effective key length."},
+        {"id": "D", "text": "Because the outer hash uses a different algorithm entirely."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Length extension on $H(K \\| M)$ would let Mallory append $M'$ and produce $H(K \\| M \\| M')$. NMAC blocks this: even if Mallory could extend the inner hash, she cannot recompute the outer hash without $K_1$.",
+      "distractorAnalysis": {
+        "A": "**Vague Hand-wave** — Doubling iterations doesn't formally defeat length extension; the *structure* does.",
+        "C": "**Different Concern** — Key length helps against brute force, not length extension specifically.",
+        "D": "**False** — Both invocations use the same hash function $H$."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "HMAC Construction",
+      "stem": "HMAC is defined as $H((K' \\oplus \\text{opad}) \\| H((K' \\oplus \\text{ipad}) \\| M))$ where opad = `0x5c` repeated and ipad = `0x36` repeated. What is the design purpose of using two distinct pads instead of two separate keys?",
+      "choices": [
+        {"id": "A", "text": "To avoid storing two separate keys while still deriving two different effective keys $K' \\oplus \\text{opad}$ and $K' \\oplus \\text{ipad}$ from one master key."},
+        {"id": "B", "text": "To make the hash faster on modern CPUs."},
+        {"id": "C", "text": "To support legacy hardware that cannot handle long keys."},
+        {"id": "D", "text": "To allow the same key to be used for encryption and MACing."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "NMAC required two keys; HMAC reduces this to one. By XORing with two very different fixed patterns (opad and ipad), the construction derives two effectively independent keys from a single $K'$. The patterns differ in many bits for paranoia.",
+      "distractorAnalysis": {
+        "B": "**Irrelevant** — Performance is not the design driver.",
+        "C": "**Anachronism** — HMAC was designed for cryptographic strength, not legacy hardware.",
+        "D": "**Anti-pattern** — Reusing keys across primitives violates the lecture's own guidance."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q12",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "MACs and Confidentiality",
+      "stem": "Which property does HMAC NOT provide?",
+      "choices": [
+        {"id": "A", "text": "Existential unforgeability under EU-CPA."},
+        {"id": "B", "text": "Integrity for $M$."},
+        {"id": "C", "text": "IND-CPA confidentiality of $M$."},
+        {"id": "D", "text": "Authentication when only two parties hold $K$."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "HMAC is deterministic: $\\text{HMAC}(K, M)$ is the same value every time. Determinism breaks IND-CPA, so HMAC cannot provide confidentiality. It does provide integrity, EU-CPA security, and (under the two-party assumption) authenticity.",
+      "distractorAnalysis": {
+        "A": "**Provided** — EU-CPA is the defining MAC security property.",
+        "B": "**Provided** — Tampering changes the tag.",
+        "D": "**Provided** — With only two key holders, a valid MAC narrows the sender."
+      },
+      "trapCategories": [
+        "category-error",
+        "not-provide-test",
+        "not-provide-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Authenticated Encryption Definition",
+      "stem": "Authenticated encryption (AE) simultaneously provides which set of properties?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality only."},
+        {"id": "B", "text": "Integrity only."},
+        {"id": "C", "text": "Confidentiality, integrity, and (under appropriate threat models) authenticity."},
+        {"id": "D", "text": "Forward secrecy and non-repudiation."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "AE is the umbrella for any scheme that delivers confidentiality + integrity + (often) authenticity in one construction or by composing IND-CPA encryption with an EU-CPA MAC.",
+      "distractorAnalysis": {
+        "A": "**Half** — Only confidentiality.",
+        "B": "**Half** — Only integrity.",
+        "D": "**Wrong Properties** — Forward secrecy is a key-management property; non-repudiation requires asymmetric crypto."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q14",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "MAC-then-Encrypt vs Encrypt-then-MAC",
+      "stem": "Slide 31 says \"always use Encrypt-then-MAC.\" What is the *robustness* argument for preferring it over MAC-then-Encrypt?",
+      "choices": [
+        {"id": "A", "text": "Encrypt-then-MAC produces shorter ciphertexts."},
+        {"id": "B", "text": "Encrypt-then-MAC lets the receiver verify the MAC *before* decrypting, so attacker-chosen ciphertexts never reach the decryption routine — eliminating timing/side-channel attacks on decrypt."},
+        {"id": "C", "text": "MAC-then-Encrypt is mathematically insecure under any threat model."},
+        {"id": "D", "text": "Encrypt-then-MAC uses fewer keys."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "If the MAC fails, the receiver rejects without invoking the decryption function on attacker-chosen input. This blocks attacks like Lucky 13 that exploit timing variation in the decryption path.",
+      "distractorAnalysis": {
+        "A": "**Irrelevant** — Both produce comparable lengths.",
+        "C": "**Overstatement** — In theory both are secure if used properly; the issue is implementation robustness.",
+        "D": "**False** — Both use two keys."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q15",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Lucky 13 Attack",
+      "stem": "TLS 1.0 used MAC-then-Encrypt with AES-CBC. The Lucky 13 attack exploited which precise weakness?",
+      "choices": [
+        {"id": "A", "text": "AES-CBC is broken under chosen-plaintext attack."},
+        {"id": "B", "text": "Timing differences during MAC verification (which depend on whether the decrypted ciphertext has valid padding) leaked information about the plaintext to the attacker."},
+        {"id": "C", "text": "TLS 1.0 used unsalted password hashing."},
+        {"id": "D", "text": "The MAC was computed on the ciphertext rather than the plaintext."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Because TLS decrypted before verifying, the MAC error path's timing depended on padding validity, which depended on plaintext bits. Repeated probing let the attacker recover plaintext bytes.",
+      "distractorAnalysis": {
+        "A": "**False** — AES-CBC is IND-CPA secure with proper IVs.",
+        "C": "**Wrong Topic** — Password hashing is a separate concern.",
+        "D": "**Inverted** — MAC was on plaintext (MAC-then-Encrypt); the lecture's recommendation is to compute it on ciphertext (Encrypt-then-MAC)."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "AEAD",
+      "stem": "AEAD (Authenticated Encryption with Additional Data) provides confidentiality and integrity over the plaintext plus integrity over additional unencrypted data. Why is the additional data feature useful?",
+      "choices": [
+        {"id": "A", "text": "It allows headers (e.g., routing info) that must remain plaintext for processing to still be authenticated alongside the ciphertext."},
+        {"id": "B", "text": "It encrypts the headers as well as the body."},
+        {"id": "C", "text": "It provides forward secrecy."},
+        {"id": "D", "text": "It allows compression of the plaintext."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Network protocols often need plaintext metadata (routing, type tags) but still want tamper-detection over those fields. AEAD's AD slot binds the metadata into the auth tag without encrypting it.",
+      "distractorAnalysis": {
+        "B": "**Inverted** — The whole point is *not* to encrypt the AD.",
+        "C": "**Different Property** — Forward secrecy is achieved by ephemeral keys, not AEAD.",
+        "D": "**Unrelated** — Compression is orthogonal and is dangerous to combine with AEAD (CRIME, BREACH attacks)."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q17",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "GCM Mode",
+      "stem": "In the GCM block diagram (Slides 34-35), the IV initializes Counter 0, the counter increments per block via `incr`, each counter is encrypted with $E_K$ and XORed with plaintext, and the resulting ciphertexts plus AD plus length feed through chained $\\text{mult}_H$ operations to produce the Auth Tag. What does GCM derive its confidentiality and integrity from, respectively?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality from $\\text{mult}_H$; integrity from $E_K$."},
+        {"id": "B", "text": "Confidentiality from CTR-mode encryption ($E_K$ keystream XOR); integrity from the Galois-field multiplication chain ($\\text{mult}_H$)."},
+        {"id": "C", "text": "Both from $E_K$; $\\text{mult}_H$ is decorative."},
+        {"id": "D", "text": "Confidentiality from the IV; integrity from the counter."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "GCM is essentially CTR mode (for confidentiality) plus a GMAC built from Galois-field multiplications (for integrity). The two roles are distinct components combined into one mode.",
+      "distractorAnalysis": {
+        "A": "**Inverted Roles** — $\\text{mult}_H$ is for the auth chain, not encryption.",
+        "C": "**False** — $\\text{mult}_H$ is essential to the auth tag.",
+        "D": "**Confusion** — IVs and counters are inputs, not the source of security guarantees."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q18",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "GCM Misuse",
+      "stem": "Slide 35 warns that under IV reuse, GCM \"is even worse than CTR mode.\" What is the additional damage GCM suffers beyond CTR's two-time-pad failure?",
+      "choices": [
+        {"id": "A", "text": "Nothing extra; GCM's failure mode is identical to CTR's."},
+        {"id": "B", "text": "IV reuse in GCM not only reveals plaintext (like CTR) but also lets attackers recover the GMAC authentication key $H$, allowing forgery of arbitrary tags going forward."},
+        {"id": "C", "text": "GCM keys self-destruct on reuse."},
+        {"id": "D", "text": "GCM ciphertext becomes decrypt-only, never encrypt-able."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Two ciphertexts under the same IV give Eve $C_1 \\oplus C_2 = M_1 \\oplus M_2$ (CTR failure) plus enough structure in the polynomial-based GMAC to solve for $H$, breaking integrity for *all* future messages.",
+      "distractorAnalysis": {
+        "A": "**False** — Slide 35 explicitly says GCM is worse on reuse.",
+        "C": "**Nonsense** — Keys don't self-destruct.",
+        "D": "**Nonsense** — Mode doesn't change directional behavior on reuse."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q19",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Authenticated Encryption Definition",
+      "stem": "After studying hashes, MACs, and AEAD, which design rule best summarizes the lecture's overall guidance for transmitting a confidential, tamper-evident message over an insecure channel?",
+      "choices": [
+        {"id": "A", "text": "Use a hash to provide both confidentiality and integrity."},
+        {"id": "B", "text": "Use AEAD (e.g., AES-GCM) when implemented correctly, or compose IND-CPA encryption (AES-CTR) with an EU-CPA MAC (HMAC-SHA256) using Encrypt-then-MAC."},
+        {"id": "C", "text": "Use MAC-then-Encrypt because it hides the MAC inside the ciphertext."},
+        {"id": "D", "text": "Use a deterministic encryption scheme paired with a hash for randomness."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture explicitly recommends Encrypt-then-MAC and AEAD as the two paths to authenticated encryption. AEAD when used correctly is preferred; explicit composition is the safe fallback.",
+      "distractorAnalysis": {
+        "A": "**Wrong Tool** — Hashes are unkeyed and provide neither.",
+        "C": "**Anti-pattern** — Lucky 13 illustrates why MAC-then-Encrypt is fragile.",
+        "D": "**Confused** — Determinism breaks IND-CPA; hashes don't fix that."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L04-Q20",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "HMAC Properties",
+      "stem": "Slide 25 lists HMAC properties. Which statement is correct about HMAC's relationship to its underlying hash $H$?",
+      "choices": [
+        {"id": "A", "text": "HMAC is collision-resistant if and only if $H$ is collision-resistant, and inherits length-extension vulnerability from $H$."},
+        {"id": "B", "text": "HMAC inherits collision resistance from $H$ but does NOT inherit length-extension vulnerability, because the outer hash blocks extension."},
+        {"id": "C", "text": "HMAC requires $H$ to be deterministic but otherwise has no relation to $H$'s properties."},
+        {"id": "D", "text": "HMAC is reversible, unlike $H$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "HMAC's nested structure (outer hash over inner-keyed-hash output) is specifically designed to neutralize length-extension attacks even when the underlying $H$ (e.g., SHA-256) is vulnerable. Collision resistance does carry over.",
+      "distractorAnalysis": {
+        "A": "**Half-Right** — Collision resistance is inherited; length extension is not.",
+        "C": "**Vague** — HMAC's security crucially depends on $H$'s properties.",
+        "D": "**False** — HMAC is one-way like $H$."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

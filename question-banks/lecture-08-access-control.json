@@ -1,0 +1,527 @@
+{
+  "lectureId": "lecture-08-access-control",
+  "lectureTitle": "Access Control",
+  "lectureNumber": 8,
+  "topics": [
+    "Vocabulary: Users, Principals, Subjects, Objects",
+    "Discretionary Access Control (DAC)",
+    "Access Control Matrix",
+    "Access Control Lists (ACL)",
+    "Capabilities",
+    "Trojan Horse Attack",
+    "Mandatory Access Control (MAC)",
+    "Bell-LaPadula (BLP) Model",
+    "BLP Problems and Covert Channels",
+    "Biba Integrity Model",
+    "Chinese Wall (Brewer-Nash)",
+    "Role-Based Access Control (RBAC)",
+    "RBAC Shortcomings"
+  ],
+  "questions": [
+    {
+      "id": "L08-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Vocabulary: Users, Principals, Subjects, Objects",
+      "stem": "Slide 5 introduces the basic abstractions of access control. Which definition correctly describes a *subject*?",
+      "choices": [
+        {"id": "A", "text": "A piece of data or a resource (e.g., a file or network packet)."},
+        {"id": "B", "text": "An entity that wishes to access an object — typically a process executing on behalf of a user/principal."},
+        {"id": "C", "text": "A human end user."},
+        {"id": "D", "text": "A permission such as read or write."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A subject is the *active* entity in the access-control triple (S × O × P). It is the program/process that initiates an access request on behalf of a principal.",
+      "distractorAnalysis": {
+        "A": "**Wrong Abstraction** — That is an *object*, the passive resource being accessed.",
+        "C": "**Wrong Abstraction** — A human is a *user*; once authenticated in a context, the user becomes a *principal*.",
+        "D": "**Wrong Abstraction** — Read/write are *rights* (permissions), not subjects."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Vocabulary: Users, Principals, Subjects, Objects",
+      "stem": "Slide 7 shows Jian → {Jian.TS, Jian.S, Jian.C, Jian.U}. Why is the user-to-principal relation deliberately one-to-many?",
+      "choices": [
+        {"id": "A", "text": "It enables accountability and least privilege — one user can act in distinct authenticated contexts (e.g., separate API keys, classification levels) without leaking authority across them."},
+        {"id": "B", "text": "Each principal is a separate person sharing the same account."},
+        {"id": "C", "text": "The OS forces every login to spawn four principals."},
+        {"id": "D", "text": "It makes the user database larger and therefore more secure."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 9 explicitly cites accountability and least privilege. By splitting the user into context-specific principals, compromise of one principal does not grant the attacker the user's full authority.",
+      "distractorAnalysis": {
+        "B": "**Wrong Concept** — Principals are *contexts of one user*, not separate humans.",
+        "C": "**Fabrication** — No fixed principal count is enforced.",
+        "D": "**Wrong Reason** — Database size is unrelated to least privilege."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Discretionary Access Control (DAC)",
+      "stem": "What is the *defining* property of Discretionary Access Control?",
+      "choices": [
+        {"id": "A", "text": "Access is determined by a system-wide policy that only an administrator can change."},
+        {"id": "B", "text": "Access rights can be propagated at the subject's discretion — possession of a right is sufficient to grant access."},
+        {"id": "C", "text": "Access is bound to roles which are then assigned to users."},
+        {"id": "D", "text": "Access requires a security label that dominates the object's classification."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 14: DAC 'allows access rights to be propagated at subject's discretion' and 'subjects can determine who has access to their objects.'",
+      "distractorAnalysis": {
+        "A": "**Wrong Policy** — That describes MAC, not DAC.",
+        "C": "**Wrong Policy** — That describes RBAC.",
+        "D": "**Wrong Policy** — Label dominance is the BLP/MAC mechanism."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Access Control Matrix",
+      "stem": "What does each cell M[s,o] of an access control matrix store?",
+      "choices": [
+        {"id": "A", "text": "The set A ⊆ S × O × P represented as a single integer."},
+        {"id": "B", "text": "The set of permissions p ∈ P that subject s holds on object o."},
+        {"id": "C", "text": "The session token used by subject s."},
+        {"id": "D", "text": "A single permission shared by all subjects on object o."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slides 15–16: A ⊆ S × O × P; the matrix view stores at M[s,o] the subset of permissions granted to subject s on object o (e.g., {rw}, {kill}, {r}).",
+      "distractorAnalysis": {
+        "A": "**Wrong Encoding** — Cells are sets of permissions, not packed integers.",
+        "C": "**Wrong Concept** — Session tokens belong to authentication, not access matrices.",
+        "D": "**Wrong Resolution** — The whole point of the matrix is per-subject permissions."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Access Control Lists (ACL)",
+      "stem": "How do ACLs and capabilities differ in *where* the authorization data lives?",
+      "choices": [
+        {"id": "A", "text": "They are equivalent — both store data with the subject."},
+        {"id": "B", "text": "ACLs attach a (subject, permission) list to each *object*; capabilities give each *subject* tokens listing (object, permission) pairs."},
+        {"id": "C", "text": "ACLs live in the kernel; capabilities live in userspace applications."},
+        {"id": "D", "text": "ACLs require encryption; capabilities are always plaintext."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "ACLs are a column-wise slicing of the access matrix (per object); capabilities are a row-wise slicing (per subject). Same matrix, different physical storage.",
+      "distractorAnalysis": {
+        "A": "**Wrong** — They are complementary, not equivalent.",
+        "C": "**Fabrication** — Placement is not the kernel/userspace distinction.",
+        "D": "**Reversed** — Capabilities typically need cryptographic unforgeability; ACLs don't require encryption."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q06",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Capabilities",
+      "stem": "Slide 19: ACLs require authentication of subjects. What do *capabilities* require instead?",
+      "choices": [
+        {"id": "A", "text": "They require authentication of subjects, just by a different protocol."},
+        {"id": "B", "text": "Unforgeability and controlled propagation of capability tokens — typically achieved with cryptography."},
+        {"id": "C", "text": "Same-origin policy enforced by the OS."},
+        {"id": "D", "text": "A trusted directory service to map names to keys."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Capabilities are *bearer tokens*: holding the token = holding the right. Authentication of the holder is unnecessary; what matters is that tokens cannot be forged and propagation is controlled.",
+      "distractorAnalysis": {
+        "A": "**Direct Contradiction** — Slide 19 says capabilities do *not* require subject authentication.",
+        "C": "**Wrong Domain** — Same-origin policy is a browser concept.",
+        "D": "**Wrong Concept** — Trusted directories are a PKI primitive, not a capability mechanism."
+      },
+      "trapCategories": [
+        "definition-match",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q07",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Trojan Horse Attack",
+      "stem": "Slide 22: Principal A runs a 'Good Program' that secretly contains Trojan code. The Trojan creates File G with ACL `B:r, A:w` and copies File F (where ACL is `A:r`) into G. What did the attacker accomplish?",
+      "choices": [
+        {"id": "A", "text": "The Trojan elevates A to root."},
+        {"id": "B", "text": "Information from File F (which only A can read) is laundered into File G, where Principal B — who could not read F directly — can now read F's contents via G."},
+        {"id": "C", "text": "The Trojan changes File F's ACL to grant B direct read access."},
+        {"id": "D", "text": "The Trojan exploits a buffer overflow in the kernel."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "DAC happily lets the Trojan use A's read on F and write on G — both are A's legitimate rights. The leak is *authority abuse*, not a permissions violation. F's ACL is never modified.",
+      "distractorAnalysis": {
+        "A": "**Wrong Attack** — No privilege escalation is needed; the Trojan abuses A's existing rights.",
+        "C": "**Wrong Mechanism** — F's ACL stays the same; that's the point.",
+        "D": "**Wrong Class** — Trojan Horse is an authority-abuse attack, not memory corruption."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q08",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Discretionary Access Control (DAC)",
+      "stem": "Slide 21 says DAC's underlying problem is 'a difference between trusting a person and trusting a program.' Why does this break DAC?",
+      "choices": [
+        {"id": "A", "text": "DAC assumes all programs are written in memory-safe languages."},
+        {"id": "B", "text": "Programs run with the user's full authority, so any malicious or buggy program (e.g., a Trojan or exploited service) can exercise *all* of the user's rights against the user's interests."},
+        {"id": "C", "text": "DAC encrypts user data with a weak key."},
+        {"id": "D", "text": "DAC cannot be represented as an access matrix."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Subjects (programs) inherit the principal's full authority. The user trusts a coworker not to leak data, but cannot vouch for every program executing under their account — yet DAC grants those programs the user's full rights.",
+      "distractorAnalysis": {
+        "A": "**Wrong Concern** — Memory safety is not DAC's failure mode.",
+        "C": "**Irrelevant** — Encryption strength is unrelated.",
+        "D": "**False** — DAC is naturally expressible as a matrix."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Mandatory Access Control (MAC)",
+      "stem": "Which property distinguishes MAC from DAC?",
+      "choices": [
+        {"id": "A", "text": "MAC uses an access control matrix; DAC does not."},
+        {"id": "B", "text": "In MAC, access is governed by a system-wide policy (typically based on security labels) changeable only by the administrator; subjects cannot grant their rights to others."},
+        {"id": "C", "text": "MAC permits subjects to propagate access at their discretion."},
+        {"id": "D", "text": "MAC is only used for integrity, never confidentiality."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 12 contrasts MAC ('system-wide policies … changed only by the administrator') with DAC's discretionary propagation. The non-discretionary, label-based nature is MAC's hallmark.",
+      "distractorAnalysis": {
+        "A": "**Wrong** — Both DAC and MAC can be expressed via matrices.",
+        "C": "**Wrong Policy** — That's DAC, not MAC.",
+        "D": "**Wrong Scope** — MAC covers both: BLP for confidentiality, Biba for integrity."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Bell-LaPadula (BLP) Model",
+      "stem": "BLP's Simple Security Property (SS): *no read up*. What is its purpose?",
+      "choices": [
+        {"id": "A", "text": "Prevent a low-cleared subject from reading information classified above its level."},
+        {"id": "B", "text": "Prevent a high-cleared subject from leaking information downward."},
+        {"id": "C", "text": "Prevent integrity corruption of high-classified data."},
+        {"id": "D", "text": "Enforce role separation."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "SS protects confidentiality on the read path: a Confidential-cleared subject cannot read a Top-Secret file, so high-classified information cannot enter low-cleared workflows via direct reads.",
+      "distractorAnalysis": {
+        "B": "**Wrong Property** — That's the goal of the Star property (no write down).",
+        "C": "**Wrong Model** — BLP is confidentiality-only; integrity is Biba's domain.",
+        "D": "**Wrong Model** — Role separation is RBAC."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q11",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Bell-LaPadula (BLP) Model",
+      "stem": "BLP's Star (*) Property says *no write down*. Why is this rule needed *in addition* to 'no read up'?",
+      "choices": [
+        {"id": "A", "text": "To prevent buffer overflow when writing large files."},
+        {"id": "B", "text": "To stop a *Trojan Horse* running with high-level subject privileges from writing classified data into a lower-classified object readable by uncleared subjects."},
+        {"id": "C", "text": "Because writing is computationally more expensive than reading."},
+        {"id": "D", "text": "To enforce role separation across clearance levels."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 29 explicitly cites 'fear of Trojan Horse.' SS blocks direct reads, but a Trojan inside a TS-cleared subject could otherwise write TS data into a U-classified file and leak it. No-write-down closes that channel.",
+      "distractorAnalysis": {
+        "A": "**Wrong Concept** — Overflow is unrelated.",
+        "C": "**Wrong Reasoning** — Performance isn't the BLP rationale.",
+        "D": "**Wrong Model** — Role separation is RBAC."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q12",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "BLP Problems and Covert Channels",
+      "stem": "Slide 32: subject s1 reads o1 (Secret) at L_c=Secret, then drops to L_c=Unclassified and writes o2 (Unclassified). Each individual state is 'secure' yet the system leaks. What fix does the slide propose?",
+      "choices": [
+        {"id": "A", "text": "Disallow all writes after any read."},
+        {"id": "B", "text": "Subjects cannot drop their current level below the highest level read so far — i.e., no self-declassification."},
+        {"id": "C", "text": "Force every subject to operate at its maximal level only."},
+        {"id": "D", "text": "Encrypt all writes with the subject's private key."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The leak depends on s1 voluntarily lowering L_c after reading Secret. Forbidding that downgrade preserves BLP's invariant: information from level L cannot flow into a write at any level below L.",
+      "distractorAnalysis": {
+        "A": "**Too Restrictive** — Not the recommended fix; would break legitimate workflows.",
+        "C": "**Loses Flexibility** — Eliminates the benefit of separating current vs maximal level.",
+        "D": "**Wrong Mechanism** — Encryption doesn't prevent declassification by the subject."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "BLP Problems and Covert Channels",
+      "stem": "Slide 33 shows two Trojan-infected subjects at TS and U with information flowing via 'timing of packets being sent.' Why does BLP's star-property fail to block this?",
+      "choices": [
+        {"id": "A", "text": "Because timing is encrypted by default."},
+        {"id": "B", "text": "Because the star-property regulates only explicit read/write operations on labeled objects; the timing of legitimate operations forms a *covert channel* outside the reference monitor's scope."},
+        {"id": "C", "text": "Because the high subject has root privileges."},
+        {"id": "D", "text": "Because BLP doesn't apply to network traffic."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Covert channels exploit shared resources whose state is not itself a labeled object — CPU time, packet timing, cache occupancy. The reference monitor sees only authorized ops; the channel hides in their side effects.",
+      "distractorAnalysis": {
+        "A": "**False** — Encryption doesn't hide timing patterns.",
+        "C": "**Irrelevant** — Privilege level isn't the bypass mechanism.",
+        "D": "**Wrong** — BLP applies system-wide; the issue is channel type, not medium."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q14",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Biba Integrity Model",
+      "stem": "The Biba integrity model is described as 'BLP upside down.' Which rule pair is correct for Biba?",
+      "choices": [
+        {"id": "A", "text": "No read up, no write down."},
+        {"id": "B", "text": "No read down, no write up."},
+        {"id": "C", "text": "No reads or writes across levels at all."},
+        {"id": "D", "text": "Read freely, write only at your own level."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slides 34–35: Biba protects integrity by preventing high-integrity subjects from *reading low-integrity data* (which could corrupt their decisions) and from *writing high-integrity objects* (which could pollute them). It is BLP's dual.",
+      "distractorAnalysis": {
+        "A": "**Wrong Model** — That is BLP.",
+        "C": "**Too Strict** — Biba allows same-level operations.",
+        "D": "**Wrong Rule** — Reading down imports low-integrity data."
+      },
+      "trapCategories": [
+        "common-misconception",
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q15",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Biba Integrity Model",
+      "stem": "BLP and Biba look like duals. Why doesn't an OS simply 'AND' them together to get both confidentiality and integrity?",
+      "choices": [
+        {"id": "A", "text": "They cannot be combined — the rules are mathematically inconsistent."},
+        {"id": "B", "text": "Combining 'no read up' (BLP) with 'no read down' (Biba) restricts subjects to reads at *their exact level only*; same for writes — the result is too restrictive for most real workflows."},
+        {"id": "C", "text": "Biba was deprecated in 1989."},
+        {"id": "D", "text": "BLP and Biba use incompatible label alphabets."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "BLP allows reads at-or-below; Biba allows reads at-or-above. Their intersection is reads at the same level only. Same for writes. Systems usually pick one or layer them carefully (e.g., Windows uses a Biba-like integrity model for malware containment).",
+      "distractorAnalysis": {
+        "A": "**False** — They are consistent, just very restrictive when combined.",
+        "C": "**False** — Biba is still in use (e.g., Windows).",
+        "D": "**False** — Both can use the same totally-ordered label set."
+      },
+      "trapCategories": [
+        "synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Chinese Wall (Brewer-Nash)",
+      "stem": "Chinese Wall *read* rule: subject S can read object O only if…",
+      "choices": [
+        {"id": "A", "text": "O is in the same company dataset as some object S has previously read, OR O belongs to a conflict-of-interest class in which S has not yet read any object."},
+        {"id": "B", "text": "O is at a security level dominated by S's clearance."},
+        {"id": "C", "text": "O is owned by S."},
+        {"id": "D", "text": "O has no integrity label."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 38: once S reads from CD1 inside COI1, S is 'inside the wall' for CD1 and barred from CD2 in COI1. S can still read freely from any CD in another COI it hasn't touched.",
+      "distractorAnalysis": {
+        "B": "**Wrong Model** — That is BLP dominance.",
+        "C": "**Wrong Concept** — Ownership is a DAC notion.",
+        "D": "**Wrong Model** — Chinese Wall doesn't use integrity labels."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q17",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Chinese Wall (Brewer-Nash)",
+      "stem": "Chinese Wall's *write* rule is stricter: S can write O only if S can read O AND S has never read an object O' with CD(O') ≠ CD(O). What attack does this rule prevent?",
+      "choices": [
+        {"id": "A", "text": "Privilege escalation."},
+        {"id": "B", "text": "*Information laundering*: without the rule, S1 could read CD1 and write into CD3, where S2 (who has read CD2) could then read it — combining CD1 and CD2 conflict-of-interest data indirectly."},
+        {"id": "C", "text": "BLP no-write-down violations."},
+        {"id": "D", "text": "Encryption-key reuse."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 39's scenario: S1 reads CD1 and writes O6 in CD3; S2 reads CD2 then reads O6 — S2 has effectively combined CD1+CD2. The strict write rule says: once you've read across CDs, you can never write again, breaking the laundering channel.",
+      "distractorAnalysis": {
+        "A": "**Wrong Concern** — Privilege escalation isn't a conflict-of-interest issue.",
+        "C": "**Wrong Model** — BLP and Chinese Wall are independent policies.",
+        "D": "**Irrelevant** — Encryption is unrelated."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q18",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Role-Based Access Control (RBAC)",
+      "stem": "What is the primary motivation for RBAC (1995) over DAC/MAC?",
+      "choices": [
+        {"id": "A", "text": "RBAC eliminates the need for authentication."},
+        {"id": "B", "text": "Real-world security policies are dynamic — users change jobs and projects. RBAC factors permissions through roles so admins reassign by changing role membership rather than rewriting per-user grants."},
+        {"id": "C", "text": "RBAC is the only model that supports encryption."},
+        {"id": "D", "text": "RBAC removes the need for an access control matrix."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Slide 41: when a user is promoted, their rights must change. Per-user grants don't scale; RBAC adds a role layer so a single membership change updates all derived permissions.",
+      "distractorAnalysis": {
+        "A": "**False** — Authentication is still required.",
+        "C": "**Irrelevant** — Encryption is orthogonal to access control.",
+        "D": "**False** — RBAC still uses matrices internally; it adds indirection through roles."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q19",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Role-Based Access Control (RBAC)",
+      "stem": "Slide 42 says RBAC can be configured to do DAC *or* MAC. How does it simulate MAC?",
+      "choices": [
+        {"id": "A", "text": "By treating roles as security clearances and assigning users to clearance roles (ESORICS 96)."},
+        {"id": "B", "text": "By disabling all roles entirely."},
+        {"id": "C", "text": "By using JavaScript instead of Liquid templates."},
+        {"id": "D", "text": "By making every role its own conflict-of-interest class."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Slide 42: 'roles simulate clearances (ESORICS 96).' A role hierarchy mirrors a clearance lattice, with role inheritance encoding dominance.",
+      "distractorAnalysis": {
+        "B": "**Self-defeating** — Disabling roles defeats RBAC entirely.",
+        "C": "**Wrong Domain** — Web templating is unrelated.",
+        "D": "**Wrong Model** — Conflict-of-interest is Chinese Wall."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L08-Q20",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "RBAC Shortcomings",
+      "stem": "Which of the following is *NOT* listed as an RBAC shortcoming on slide 45?",
+      "choices": [
+        {"id": "A", "text": "Role granularity is often inadequate, leading to *role explosion*."},
+        {"id": "B", "text": "Role design and engineering is difficult and expensive."},
+        {"id": "C", "text": "RBAC requires more cryptography than DAC."},
+        {"id": "D", "text": "Adjusting roles based on local/global situational factors is difficult."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "Slide 45 lists role explosion, expensive role engineering, cumbersome user/permission assignment, and difficulty handling situational factors. Cryptography is *not* mentioned — it's orthogonal to RBAC.",
+      "distractorAnalysis": {
+        "A": "**Listed** — Role explosion is the canonical RBAC complaint.",
+        "B": "**Listed** — Role engineering cost is on slide 45.",
+        "D": "**Listed** — Local/global adjustment difficulty is on slide 45."
+      },
+      "trapCategories": [
+        "not-listed",
+        "common-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

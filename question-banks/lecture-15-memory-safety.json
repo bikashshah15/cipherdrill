@@ -1,0 +1,608 @@
+{
+  "lectureId": "lecture-15-memory-safety",
+  "lectureTitle": "Memory Safety Vulnerabilities",
+  "lectureNumber": 15,
+  "topics": [
+    "Why C is memory-unsafe",
+    "Buffer overflow basics",
+    "Static memory overflow effects",
+    "Function pointer overwrite",
+    "Stack smashing fundamentals",
+    "Stack frame anatomy — RIP, SFP, locals",
+    "Overwriting the saved RIP",
+    "Little-endian addresses",
+    "Shellcode and machine code",
+    "Constructing exploits — payload layout",
+    "Shellcode placement before vs after the RIP",
+    "Walking through a buffer overflow",
+    "Function epilogue — leave / ret",
+    "Memory-safe alternatives — fgets, sizeof",
+    "Dangerous C library functions",
+    "Heap overflow possibility",
+    "Signed vs unsigned integer vulnerabilities",
+    "Integer overflow / wraparound",
+    "CVE-2022-0185 integer underflow",
+    "printf format string semantics",
+    "Reading stack with %x and %s",
+    "Writing memory with %n",
+    "Format string defense — fixed format string",
+    "Top-25 dangerous weaknesses (CWE)"
+  ],
+  "questions": [
+    {
+      "id": "L15-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Why C is memory-unsafe",
+      "stem": "Why does the C statement `name[5] = 'a';` compile and run successfully even when `name` was declared as `char name[4]`?",
+      "choices": [
+        { "id": "A", "text": "C performs runtime bounds checking but only logs the error to stderr." },
+        { "id": "B", "text": "C arrays are just sequences of bytes; the language has no concept of array length and no automatic bounds check." },
+        { "id": "C", "text": "The compiler silently extends the array to length 6." },
+        { "id": "D", "text": "Index 5 is converted to index 4 modulo the array length." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "C's array model is just pointer arithmetic on a contiguous byte region. `name[5]` desugars to `*(name + 5)` — the compiler emits the dereference without ever checking that 5 < 4. Whatever byte happens to live at that offset gets overwritten. This is the foundation of every buffer overflow vulnerability.",
+      "distractorAnalysis": {
+        "A": "C does no automatic bounds checking, period. There is no error to log.",
+        "C": "Array sizes are fixed at declaration; nothing extends them.",
+        "D": "Indices aren't wrapped; the offset is taken literally."
+      },
+      "trapCategories": ["definition-test", "no-bounds-checking"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Static memory overflow effects",
+      "stem": "Given two adjacent static variables `char name[20]` and `int authenticated = 0` (with `authenticated` placed at a higher address than `name`), how can `gets(name)` cause an authentication bypass?",
+      "choices": [
+        { "id": "A", "text": "`gets` allocates new memory that overlaps with `authenticated`." },
+        { "id": "B", "text": "`gets` writes input into `name` and continues writing past the 20-byte boundary; with enough input, the write reaches the bytes storing `authenticated` and overwrites the flag with attacker-controlled data." },
+        { "id": "C", "text": "`gets` automatically clears the `authenticated` variable." },
+        { "id": "D", "text": "C's variable scoping rules let `name` access `authenticated` directly." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "`gets` writes until newline, with no length limit. Static variables are laid out in a known order in memory; if `authenticated` is adjacent to and above `name`, then a long-enough input flows past the end of `name` and clobbers the bytes that store `authenticated`. Setting them to anything nonzero passes a `if (authenticated) {...}` check.",
+      "distractorAnalysis": {
+        "A": "`gets` doesn't allocate; it writes into an existing buffer.",
+        "C": "False — `gets` writes whatever the user supplies.",
+        "D": "C scoping doesn't grant cross-variable access; the attack works through layout, not language semantics."
+      },
+      "trapCategories": ["mechanism-test", "adjacent-overwrite"],
+      "diagramRef": "lecture-15-static-overflow",
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Function pointer overwrite",
+      "stem": "Suppose `char name[20]` is followed by `int (*fnptr)(void)` in static memory, and after `gets(name)` the program calls `fnptr()`. What is the precise reason the attacker gains code execution?",
+      "choices": [
+        { "id": "A", "text": "The compiler refuses to call function pointers, so the program crashes safely." },
+        { "id": "B", "text": "Overflowing `name` overwrites `fnptr` with attacker-chosen bytes; calling `fnptr()` jumps EIP to that address, redirecting control flow to whatever the attacker wrote." },
+        { "id": "C", "text": "The overflow corrupts the instruction cache and causes random execution." },
+        { "id": "D", "text": "`gets` calls `fnptr()` automatically as part of its return path." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A function pointer is just a 32-bit (or 64-bit) address. The overflow lets the attacker overwrite those bytes with any address they like. When the program later dereferences `fnptr` and calls it, EIP is loaded with the attacker's chosen address — typically pointing to shellcode the attacker also wrote into the buffer.",
+      "distractorAnalysis": {
+        "A": "Compilers happily emit indirect calls.",
+        "C": "Code execution comes from the redirect, not cache corruption.",
+        "D": "`gets` doesn't call function pointers."
+      },
+      "trapCategories": ["mechanism-test", "control-flow-hijack"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q04",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Stack frame anatomy — RIP, SFP, locals",
+      "stem": "On a 32-bit x86 stack, in increasing-address order, which sequence correctly orders these stack-frame elements for a function with one local `char name[20]`?",
+      "choices": [
+        { "id": "A", "text": "name (low) → SFP → RIP (high)" },
+        { "id": "B", "text": "RIP (low) → SFP → name (high)" },
+        { "id": "C", "text": "SFP (low) → RIP → name (high)" },
+        { "id": "D", "text": "name (low) → RIP → SFP (high)" }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Stacks grow downward (toward lower addresses) on x86, but variables within a frame are laid out from the SFP/RIP at the top of the frame to locals below. From low to high addresses: locals (name) sit lowest, the saved frame pointer (SFP) sits above them, and the saved return instruction pointer (RIP) sits above the SFP. This ordering is why writing past the end of `name` reaches first the SFP and then the RIP.",
+      "distractorAnalysis": {
+        "B": "Reverses the order — RIP is at the highest address, not the lowest.",
+        "C": "SFP sits between locals and RIP, not below locals.",
+        "D": "RIP is above SFP, not below it."
+      },
+      "trapCategories": ["diagram-read", "stack-layout"],
+      "diagramRef": "lecture-15-stack-frame",
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Overwriting the saved RIP",
+      "stem": "Given the 32-bit attack input `'A' * 24 + '\\xef\\xbe\\xad\\xde'` against `vulnerable()` where `name[20]` is the only local, why is the address bytes-reversed and what does the input accomplish?",
+      "choices": [
+        { "id": "A", "text": "The address is reversed because x86 is little-endian, so the bytes `\\xef \\xbe \\xad \\xde` represent `0xdeadbeef`. The 24 'A's fill `name` (20 bytes) and the SFP (4 bytes); the next 4 bytes overwrite the saved RIP, so on return EIP becomes `0xdeadbeef`." },
+        { "id": "B", "text": "The address is reversed because gets reverses input automatically. The 24 'A's are arbitrary padding." },
+        { "id": "C", "text": "Reversal is required because EIP is signed. The 24 'A's seed a random number generator." },
+        { "id": "D", "text": "Reversal is cosmetic. The input does not actually overwrite the RIP." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "x86 stores multi-byte integers little-endian: the low byte at the lowest address. So the 32-bit value `0xdeadbeef` occupies memory as `ef be ad de`. The attacker writes 20 bytes of 'A' to fill `name`, 4 bytes of 'A' to overwrite the SFP, and 4 bytes encoding the target address in little-endian order to overwrite the saved RIP. When `ret` executes, it pops these 4 bytes into EIP — execution jumps to `0xdeadbeef`.",
+      "distractorAnalysis": {
+        "B": "`gets` doesn't reverse bytes; the attacker manually arranges little-endian.",
+        "C": "EIP is unsigned; reversal is purely about endianness, not signedness.",
+        "D": "It does overwrite the RIP — that's the entire point of the attack."
+      },
+      "trapCategories": ["mechanism-test", "endianness"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q06",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Shellcode and machine code",
+      "stem": "What is 'shellcode' in the context of a buffer overflow attack?",
+      "choices": [
+        { "id": "A", "text": "A shell script the attacker convinces the system to execute via filename." },
+        { "id": "B", "text": "Raw machine-code bytes the attacker writes into program memory, intended to be executed once control flow is redirected — typically opening a shell, hence the name." },
+        { "id": "C", "text": "A specially crafted SQL injection string." },
+        { "id": "D", "text": "The C source code that an exploit replaces in the running program." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Shellcode is a sequence of CPU instructions encoded as raw bytes (e.g. `0x31 0xc0 0x50 0x68...`). The attacker writes these bytes into a buffer, then redirects EIP to that buffer. The CPU executes them as instructions. The traditional payload spawns a shell (`execve(\"/bin/sh\", ...)`), giving the attacker an interactive prompt — but the term applies to any inserted machine code.",
+      "distractorAnalysis": {
+        "A": "Shellcode is machine code, not a script file.",
+        "C": "SQL injection is a different attack class.",
+        "D": "The C source is unaltered; exploits never replace source code at runtime."
+      },
+      "trapCategories": ["definition-test"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q07",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Constructing exploits — payload layout",
+      "stem": "`name` is 20 bytes starting at address `0xbfffcd40`, and SHELLCODE is exactly 12 bytes. To execute SHELLCODE, the input is `SHELLCODE + 'A' * 12 + '\\x40\\xcd\\xff\\xbf'`. Walk through why each segment is the size and contents shown.",
+      "choices": [
+        { "id": "A", "text": "12 bytes of shellcode fill the start of `name`; 12 bytes of 'A' fill the rest of `name` (8 bytes) plus the SFP (4 bytes); the final 4 bytes are the little-endian address `0xbfffcd40` that overwrites the RIP and points back to the start of `name` where SHELLCODE lives." },
+        { "id": "B", "text": "12 bytes of shellcode plus 12 bytes of padding equals exactly 24 bytes, the size of `name`. The address overwrites a stack canary." },
+        { "id": "C", "text": "The address `\\x40\\xcd\\xff\\xbf` is a NOP sled. Shellcode fills the SFP slot." },
+        { "id": "D", "text": "The 12-byte SHELLCODE is decoded by gets and replaces the RIP directly." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Layout-from-low-address: SHELLCODE goes first because we want to point the RIP at it later, and `name` starts at the lowest address. SHELLCODE = 12 bytes consumes the first 12 of `name`'s 20 bytes. The remaining 8 bytes of `name` plus the 4-byte SFP = 12 bytes, filled with 'A' as padding. Then the 4-byte RIP slot is overwritten with little-endian `0xbfffcd40` — the address of `name[0]`, where SHELLCODE begins. On return, EIP jumps there.",
+      "distractorAnalysis": {
+        "B": "`name` is 20 bytes, not 24. Stack canaries are a defense the lecture hasn't introduced yet.",
+        "C": "NOP sleds are a different technique not used here; SFP gets padding 'A's.",
+        "D": "`gets` writes input verbatim; it doesn't decode or relocate anything."
+      },
+      "trapCategories": ["payload-construction", "endianness"],
+      "diagramRef": "lecture-15-exploit-layout",
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q08",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Shellcode placement before vs after the RIP",
+      "stem": "If the attacker now has 28 bytes of SHELLCODE — too large to fit in `name[20]` before the RIP — what does the exploit look like, and why?",
+      "choices": [
+        { "id": "A", "text": "Place shellcode after the RIP: `'A' * 24 + '\\x5c\\xcd\\xff\\xbf' + SHELLCODE`. The 24 A's fill name+SFP; the address points 4 bytes past the saved-RIP slot (where SHELLCODE now begins); since gets accepts arbitrary length, writing past the RIP is permitted." },
+        { "id": "B", "text": "Truncate the shellcode to 20 bytes; the extra 8 bytes are dropped." },
+        { "id": "C", "text": "Use two `gets()` calls to write each half of the shellcode separately." },
+        { "id": "D", "text": "Compress the shellcode using gzip first." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Shellcode doesn't have to live before the RIP. `gets` writes as many bytes as the input contains, so the attacker keeps writing past the saved-RIP slot into adjacent stack memory. The payload then overwrites the RIP with the address of *that* later region. On return, EIP jumps to the post-RIP shellcode.",
+      "distractorAnalysis": {
+        "B": "`gets` doesn't truncate; it overflows freely.",
+        "C": "Single-call exploit suffices; multiple calls aren't needed.",
+        "D": "Compression doesn't help — the CPU executes raw machine bytes, not compressed data."
+      },
+      "trapCategories": ["payload-construction", "post-rip-shellcode"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q09",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Heap overflow possibility",
+      "stem": "True or false: 'Allocating the buffer on the heap with malloc instead of as a stack array makes the code immune to buffer overflows.' Pick the option that best states the truth.",
+      "choices": [
+        { "id": "A", "text": "True — heap allocations enforce bounds." },
+        { "id": "B", "text": "False — `gets(heap_buffer)` still has no length limit, so it overflows the heap allocation just as it would a stack array. Heap overflows can corrupt adjacent allocations and heap metadata, leading to control-flow hijack via different mechanisms (e.g., free-list manipulation)." },
+        { "id": "C", "text": "True — only stack memory is unsafe." },
+        { "id": "D", "text": "False — but only because heap memory is read-only." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The lecture's slide on `void vulnerable?(void) { char *name = malloc(20); gets(name); }` is explicit: heap overflows are also vulnerable. `gets` writes until newline regardless of where the buffer lives. Heap overflows have a different exploit surface — corrupting the next allocation's chunk header, free lists, or function pointers stored on the heap — but they're absolutely a vulnerability.",
+      "distractorAnalysis": {
+        "A": "False — neither `malloc` nor the heap performs bounds checking.",
+        "C": "False — heap is just as unsafe.",
+        "D": "False — heap memory is writable, that's the point."
+      },
+      "trapCategories": ["absolutist-language", "stack-vs-heap"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Memory-safe alternatives — fgets, sizeof",
+      "stem": "Why is `fgets(name, sizeof(name), stdin)` preferable to `fgets(name, 20, stdin)` even when both are safe?",
+      "choices": [
+        { "id": "A", "text": "`sizeof(name)` returns the buffer size at compile time, so changing the array declaration automatically updates the safe limit — eliminating a class of human-error bugs where the literal `20` falls out of sync with the array size." },
+        { "id": "B", "text": "`sizeof(name)` is faster than the literal `20`." },
+        { "id": "C", "text": "`sizeof(name)` works correctly when `name` is a pointer." },
+        { "id": "D", "text": "There is no difference." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "`sizeof(name)` couples the bound check to the declaration. If you later resize `name` to 40 bytes, the literal-20 version becomes silently incorrect (only half-protected); the sizeof version updates automatically. The lecture explicitly motivates this: 'Consider human factors!'",
+      "distractorAnalysis": {
+        "B": "Both compile to the same constant; no perf difference.",
+        "C": "Critical detail: `sizeof` does NOT work for pointers — that's a key gotcha. The lecture explicitly notes 'sizeof... does not work for pointers.'",
+        "D": "There's a clear maintainability difference."
+      },
+      "trapCategories": ["human-factors", "sizeof-pitfall"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q11",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Dangerous C library functions",
+      "stem": "Which of the following is NOT one of the safe replacements the lecture recommends for a known-dangerous C library function?",
+      "choices": [
+        { "id": "A", "text": "`fgets` instead of `gets`" },
+        { "id": "B", "text": "`strncpy` or `strlcpy` instead of `strcpy`" },
+        { "id": "C", "text": "`strnlen` (or `memchr`) instead of `strlen`" },
+        { "id": "D", "text": "`malloc_safe` instead of `malloc`" }
+      ],
+      "correctAnswer": "D",
+      "mechanisticExplanation": "There is no `malloc_safe` in standard C; the lecture does not recommend it. The other three pairs are explicitly listed as safer replacements that take an explicit length parameter. `malloc`'s issues (integer overflow on size, unchecked NULL return) are mitigated by careful programming, not by a renamed function.",
+      "distractorAnalysis": {
+        "A": "True — the lecture explicitly says 'Use fgets instead' of gets.",
+        "B": "True — explicitly recommended, with the caveat that strlcpy is 'less compatible, more safe.'",
+        "C": "True — explicit recommendation."
+      },
+      "trapCategories": ["not-provide", "fabricated-api"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Signed vs unsigned integer vulnerabilities",
+      "stem": "In `void func(int len, char *data) { char buf[64]; if (len > 64) return; memcpy(buf, data, len); }`, why does `len = -1` defeat the bounds check and corrupt memory?",
+      "choices": [
+        { "id": "A", "text": "Negative integers are forbidden in C and trigger an automatic abort." },
+        { "id": "B", "text": "`len > 64` is a signed comparison and `-1 > 64` is false, so the check passes. But `memcpy`'s third parameter is `size_t` (unsigned), so `-1` is reinterpreted as `0xffffffff` (~4 GB) — copying that many bytes overwrites everything." },
+        { "id": "C", "text": "The compiler optimizes the check away when `len` is signed." },
+        { "id": "D", "text": "`memcpy` rejects negative sizes at runtime." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Signed/unsigned mismatch is a classic memory-safety hole. The check uses signed comparison: -1 > 64 is false, so the function continues. Then `memcpy(dst, src, n)` takes `n` as `size_t`. Implicit conversion of -1 to size_t yields `SIZE_MAX` — `memcpy` then copies billions of bytes from `data`, blowing past `buf` and clobbering the stack and beyond.",
+      "distractorAnalysis": {
+        "A": "C does not forbid negative ints.",
+        "C": "Compilers don't elide checks based on signedness.",
+        "D": "`memcpy` accepts whatever size_t value it gets and does not validate."
+      },
+      "trapCategories": ["signed-unsigned", "implicit-conversion"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Integer overflow / wraparound",
+      "stem": "In `char *buf = malloc(len + 2); ...; memcpy(buf, data, len); buf[len] = '\\n'; buf[len+1] = '\\0';`, why does `len = 0xffffffff` produce a heap overflow?",
+      "choices": [
+        { "id": "A", "text": "`malloc` always returns NULL when len is large." },
+        { "id": "B", "text": "`len + 2` overflows the 32-bit unsigned arithmetic to `1`, so `malloc(1)` returns a 1-byte buffer. `memcpy(buf, data, 0xffffffff)` then copies ~4 GB into a 1-byte heap allocation — massive heap overflow." },
+        { "id": "C", "text": "`malloc` is undefined behavior with large arguments." },
+        { "id": "D", "text": "The compiler refuses to compile the addition." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Unsigned 32-bit addition wraps modulo 2^32. `0xffffffff + 2 = 0x100000001 mod 2^32 = 1`. The allocation is tiny but the memcpy uses the *un-wrapped* `len` of 0xffffffff. Result: write 4 GB of attacker-controlled data starting at a 1-byte heap allocation. The fix is to check `len > SIZE_MAX - 2` *before* the addition.",
+      "distractorAnalysis": {
+        "A": "`malloc(1)` succeeds normally.",
+        "C": "Wraparound is well-defined for unsigned ints.",
+        "D": "Compilers happily emit the addition."
+      },
+      "trapCategories": ["integer-overflow", "pre-check-required"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q14",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "CVE-2022-0185 integer underflow",
+      "stem": "The CVE-2022-0185 patch replaced `if (len > PAGE_SIZE - 2 - size)` with `if (size + len + 2 > PAGE_SIZE)`. What was the original bug?",
+      "choices": [
+        { "id": "A", "text": "If `size > PAGE_SIZE - 2`, then `PAGE_SIZE - 2 - size` underflows in unsigned arithmetic to a huge value (~`0xFFFFFFFF`). The check `len > 0xFFFFFFFF` is essentially always false, so the bounds check is bypassed and oversized data can be written into the kernel." },
+        { "id": "B", "text": "The original check used signed comparison and the new one uses unsigned." },
+        { "id": "C", "text": "`PAGE_SIZE` was hardcoded incorrectly." },
+        { "id": "D", "text": "`len` was the wrong variable to check." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Both `PAGE_SIZE` and `size` are unsigned. When `size > PAGE_SIZE - 2`, the subtraction underflows to a near-`SIZE_MAX` value because unsigned arithmetic wraps. Now `len > <huge>` is essentially always false, so the bounds check is silently bypassed. The patch checks the sum on the *other* side, which only overflows in extreme cases the kernel handles separately.",
+      "distractorAnalysis": {
+        "B": "Both versions use unsigned comparison; that's not the difference.",
+        "C": "PAGE_SIZE is correct.",
+        "D": "`len` is correctly the variable being bounded; the math around it was wrong."
+      },
+      "trapCategories": ["integer-underflow", "real-world-cve"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q15",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "printf format string semantics",
+      "stem": "How does `printf` know how many arguments it received?",
+      "choices": [
+        { "id": "A", "text": "The C runtime injects an argument-count prefix automatically." },
+        { "id": "B", "text": "It infers the count by parsing the format string (the first argument) and counting format specifiers like `%d`, `%s`, `%x`. Each specifier causes printf to read another value off the stack as its argument." },
+        { "id": "C", "text": "It uses reflection to inspect the calling function." },
+        { "id": "D", "text": "It always assumes there is exactly one extra argument." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Variadic function calling convention places extra arguments on the stack (in 32-bit x86) or in registers (in 64-bit System V ABI). `printf` walks the format string left-to-right, and each `%d`, `%s`, etc. tells it to pull another value from the stack/registers and interpret it accordingly. There is no metadata about how many were actually passed — the format string is treated as ground truth.",
+      "distractorAnalysis": {
+        "A": "C ABIs do not inject argument counts.",
+        "C": "C has no reflection.",
+        "D": "False — `printf(\"hello\")` and `printf(\"%d %d %d\", 1, 2, 3)` both compile and run."
+      },
+      "trapCategories": ["mechanism-test", "variadic"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q16",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Reading stack with %x and %s",
+      "stem": "In `printf(\"%d\\n\")` with no extra argument, the function still prints something. Why, and what data does it print?",
+      "choices": [
+        { "id": "A", "text": "`printf` returns immediately because no argument was supplied." },
+        { "id": "B", "text": "`printf` doesn't know it's missing an argument. It looks at the next slot on the stack where it expects `arg1` to be — finding whatever was placed there by the caller (e.g., a local variable like `secret`) — and prints those bytes as if they were an integer." },
+        { "id": "C", "text": "`printf` prints zero by default." },
+        { "id": "D", "text": "The compiler refuses to compile the call." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Format string vulnerabilities exploit exactly this: the format string says 'fetch one more argument,' and printf obediently fetches whatever is at the expected stack offset — even though the programmer didn't put anything there. The slot will contain leftover stack data: a local variable from the caller, a saved register, etc. This is how `printf(buf)` with attacker-controlled `buf = \"%x %x %x\"` reads memory.",
+      "distractorAnalysis": {
+        "A": "It does not check argument count.",
+        "C": "It prints whatever happens to be at that stack slot.",
+        "D": "Most compilers warn but don't refuse; some don't warn at all if the format string isn't a literal."
+      },
+      "trapCategories": ["mechanism-test", "stack-leak"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q17",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Writing memory with %n",
+      "stem": "What does the `%n` format specifier do, and why does it elevate format strings from a read primitive to a write primitive?",
+      "choices": [
+        { "id": "A", "text": "`%n` prints the next argument as a hex number." },
+        { "id": "B", "text": "`%n` treats its corresponding argument as a pointer and writes the count of bytes printed so far to that address — converting an attacker-controlled format string into an arbitrary memory write." },
+        { "id": "C", "text": "`%n` skips the next argument." },
+        { "id": "D", "text": "`%n` prints a newline." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "`%n` is the writeable specifier. printf takes the next vararg as a pointer, and writes the running byte-count there. Combined with width modifiers (`%100d` prints 100 chars), an attacker can write essentially any value to essentially any address whose pointer happens to be on the stack — turning a printf bug into a write-anywhere primitive useful for overwriting RIPs, GOT entries, or function pointers.",
+      "distractorAnalysis": {
+        "A": "That's `%x`.",
+        "C": "It does the opposite: it actively writes.",
+        "D": "That's `\\n`, not `%n`."
+      },
+      "trapCategories": ["mechanism-test", "write-primitive"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q18",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Trap",
+      "topic": "Format string defense — fixed format string",
+      "stem": "Two versions of code: (X) `printf(buf)` and (Y) `printf(\"%s\", buf)`. Which best describes why (Y) is safe and (X) is not, even when `buf` came from an untrusted source?",
+      "choices": [
+        { "id": "A", "text": "(X) and (Y) are equally vulnerable; the lecture lists them both as bad." },
+        { "id": "B", "text": "In (X), `buf` becomes the format string and any `%` characters in it are interpreted, allowing reads/writes of stack memory. In (Y), the format string is the fixed literal `\"%s\"` and `buf` is supplied as data only — the parser never sees attacker characters as format specifiers." },
+        { "id": "C", "text": "(Y) is safer because `%s` strips dangerous characters from `buf`." },
+        { "id": "D", "text": "Neither is safe; you should always use `fprintf` instead." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The defense is structural: never let untrusted data become the format string. By making the format string a fixed literal (`\"%s\"`) and passing user data as the corresponding argument, all `%` characters in user data are simply printed as bytes — the parser never sees them as instructions. This is the format-string equivalent of prepared statements vs string concatenation in SQL.",
+      "distractorAnalysis": {
+        "A": "(Y) is the lecture's recommended fix.",
+        "C": "`%s` doesn't sanitize; it just prints the string.",
+        "D": "`fprintf` has the same vulnerability if the format string is untrusted."
+      },
+      "trapCategories": ["data-vs-code-separation", "untrusted-format"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q19",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "Top-25 dangerous weaknesses (CWE)",
+      "stem": "On the 2020 CWE Top 25 slide, which weakness was ranked #2 by score?",
+      "choices": [
+        { "id": "A", "text": "CWE-79: Cross-site Scripting" },
+        { "id": "B", "text": "CWE-787: Out-of-bounds Write" },
+        { "id": "C", "text": "CWE-89: SQL Injection" },
+        { "id": "D", "text": "CWE-416: Use After Free" }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The slide highlights row 2 — CWE-787 Out-of-bounds Write at score 46.17 — in yellow because it's the canonical memory-safety vulnerability the lecture covers. XSS is #1, SQLi is #6, Use After Free is #8.",
+      "distractorAnalysis": {
+        "A": "Ranked #1, not #2.",
+        "C": "Ranked #6.",
+        "D": "Ranked #8."
+      },
+      "trapCategories": ["diagram-read", "cwe-ranking"],
+      "diagramRef": "lecture-15-cwe-top25",
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q20",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Walking through a buffer overflow",
+      "stem": "After the function epilogue executes for `vulnerable()` whose RIP has been overwritten with `0xbfffcd40`, which CPU register ends up pointing at the shellcode, and which instruction performed the redirection?",
+      "choices": [
+        { "id": "A", "text": "EBP, via `pop %ebp`." },
+        { "id": "B", "text": "EIP, via the `ret` instruction (which is equivalent to `pop %eip`) — it pops the overwritten saved-RIP value into EIP, and execution resumes at the shellcode address." },
+        { "id": "C", "text": "ESP, via `add $4, %esp`." },
+        { "id": "D", "text": "EAX, via the function's return value." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The function epilogue is `leave; ret`. `leave` is `mov %ebp, %esp; pop %ebp` — restoring the SFP into EBP (corrupted, but irrelevant). `ret` pops the next stack value into EIP. That value was overwritten by the attacker to be `0xbfffcd40`. The CPU now fetches the next instruction from `0xbfffcd40` — the start of the shellcode — and executes it.",
+      "distractorAnalysis": {
+        "A": "`pop %ebp` restores EBP to the corrupted SFP, but the redirection happens via `ret`/EIP.",
+        "C": "ESP is just adjusted as a side effect of the pops.",
+        "D": "EAX holds the return value, which the attacker doesn't care about."
+      },
+      "trapCategories": ["mechanism-test", "ret-instruction"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q21",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Stack smashing fundamentals",
+      "stem": "The lecture lists four 'values on the stack an attacker can overflow.' Which of the following correctly identifies all four AND ranks them by severity for control-flow hijack?",
+      "choices": [
+        { "id": "A", "text": "Local variables, function arguments, SFP, RIP — RIP is the most direct control-flow target because it is restored into EIP on return; function arguments and locals matter only insofar as the program later uses them in security-relevant ways; SFP corruption is mostly cosmetic on x86." },
+        { "id": "B", "text": "Heap allocations, environment variables, stack canaries, GOT — none of these are on the stack." },
+        { "id": "C", "text": "Local variables, registers, RIP, EBP — registers aren't on the stack." },
+        { "id": "D", "text": "Only locals can be overwritten; other slots are protected." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The lecture's bullet enumerates these exact four. RIP overwrite is the gold standard for control-flow hijack: a single 4-byte write to a known offset gives the attacker EIP. Function-pointer locals or argument-passed pointers can also redirect control if used. SFP overwrite changes EBP after `leave; ret`, which usually only matters in chained-frame attacks.",
+      "distractorAnalysis": {
+        "B": "These are different memory regions, not stack slots.",
+        "C": "Registers are CPU state, not stack contents.",
+        "D": "False — overwriting non-local stack contents is the entire point of stack smashing."
+      },
+      "trapCategories": ["synthesis", "stack-anatomy"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q22",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Static memory overflow effects",
+      "stem": "In a function with `char line[512]` followed by `char command[] = \"/usr/bin/ls\";` in static memory, then `gets(line); execv(command, ...);`, what attack does this enable?",
+      "choices": [
+        { "id": "A", "text": "An overflow of `line` cannot reach `command` because static memory is read-only." },
+        { "id": "B", "text": "An overflow of `line` can rewrite `command` to point to a different program (e.g., `/bin/sh`), so `execv(command, ...)` executes the attacker-chosen binary." },
+        { "id": "C", "text": "The attack only works if `command` is on the stack." },
+        { "id": "D", "text": "`execv` validates the command path automatically." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "This is the lecture's data-corruption variant of a buffer overflow — no control-flow hijack needed. The attacker overflows `line` to overwrite the bytes that store `command`, replacing `/usr/bin/ls` with another path. `execv(command, ...)` happily executes whatever path is now in `command`. No shellcode required; the program runs the attacker's choice of legitimate binary.",
+      "distractorAnalysis": {
+        "A": "Static (data) memory is writable; only the code section is read-only.",
+        "C": "Stack/heap/static all suffer overflow; this attack works specifically because of static-memory adjacency.",
+        "D": "`execv` runs whatever path you pass it."
+      },
+      "trapCategories": ["mechanism-test", "data-vs-control"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q23",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Stack frame anatomy — RIP, SFP, locals",
+      "stem": "Why doesn't overwriting only the SFP (without touching the RIP) typically cause immediate control-flow hijack?",
+      "choices": [
+        { "id": "A", "text": "Because the SFP is not actually stored on the stack." },
+        { "id": "B", "text": "Because `ret` restores EIP from the saved RIP, not from the SFP. After the epilogue, EBP is corrupted but EIP follows the saved RIP, which (unless also overwritten) returns control normally — the corrupted EBP only matters if subsequent code dereferences it." },
+        { "id": "C", "text": "Because the SFP is encrypted." },
+        { "id": "D", "text": "Because the OS automatically detects SFP corruption." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Control flow on `ret` is determined by the saved RIP, not the SFP. SFP corruption changes which value is restored into EBP, which only causes problems when the caller later accesses memory via EBP-relative offsets. So a clean RIP-only overwrite gives instant control; an SFP-only overwrite gives delayed and contingent corruption.",
+      "distractorAnalysis": {
+        "A": "It is on the stack.",
+        "C": "Not encrypted.",
+        "D": "OS doesn't detect this without specific defenses (canaries, etc.)."
+      },
+      "trapCategories": ["mechanism-test", "rip-vs-sfp"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q24",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Integer overflow / wraparound",
+      "stem": "Why does the safe version of integer-arithmetic code check `if (len > SIZE_MAX - 2) return;` *before* computing `len + 2`?",
+      "choices": [
+        { "id": "A", "text": "Because checking `if (len + 2 < len)` would be undefined behavior on signed types and unreliable on unsigned types where the wrap has already occurred and information is lost." },
+        { "id": "B", "text": "Because `SIZE_MAX` is faster to compare than `len + 2`." },
+        { "id": "C", "text": "Because the C standard requires checks before arithmetic." },
+        { "id": "D", "text": "Because `malloc` only accepts arguments smaller than `SIZE_MAX - 2`." }
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "After the wrap, you can't recover the original value to detect it — `len + 2 == 1` looks like a perfectly normal small number. The pre-check `len > SIZE_MAX - 2` rearranges the inequality so no addition occurs in the dangerous direction: if `len` is at most `SIZE_MAX - 2`, then `len + 2` is at most `SIZE_MAX` and doesn't wrap. For signed types, post-check is even worse — signed overflow is undefined behavior, and modern compilers may delete code that 'cannot' overflow.",
+      "distractorAnalysis": {
+        "B": "Performance is irrelevant; correctness is the issue.",
+        "C": "C does not require this; it's a defensive programming pattern.",
+        "D": "`malloc` accepts up to `SIZE_MAX`; the constraint is logical, not API-enforced."
+      },
+      "trapCategories": ["pre-check-required", "undefined-behavior"],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L15-Q25",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Top-25 dangerous weaknesses (CWE)",
+      "stem": "Why does memory safety appear three times in the top 5 of the 2020 CWE list (Out-of-bounds Write, Out-of-bounds Read, Improper Restriction of Operations within the Bounds of a Memory Buffer) despite decades of defenses?",
+      "choices": [
+        { "id": "A", "text": "Because no defenses exist." },
+        { "id": "B", "text": "Because C and C++ remain dominant in performance-critical systems software, and their unchecked-pointer model means new code continues to introduce these bugs even as old code is patched. Defenses (ASLR, DEP, stack canaries, fortify) reduce exploitability but don't eliminate the class — and rewrites in memory-safe languages like Rust are slow and selective." },
+        { "id": "C", "text": "Because ranking algorithms favor older bug classes." },
+        { "id": "D", "text": "Because operating systems require buffer overflows for normal operation." }
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Memory safety is a language-level property; defenses retrofit C/C++ but cannot make them safe. New code continues to add new bugs at roughly the same per-line rate, even as defenses make individual bugs harder to exploit. The economic and ecosystem inertia of C/C++ — kernels, browsers, embedded systems, drivers — keeps these CWEs at the top year after year, which is why language-level migration to memory-safe alternatives (Rust, Swift, Go) is the only fundamental fix.",
+      "distractorAnalysis": {
+        "A": "Many defenses exist.",
+        "C": "The ranking is data-driven, not bias-driven.",
+        "D": "OSes do not require these bugs."
+      },
+      "trapCategories": ["synthesis", "language-level-property"],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

@@ -1,0 +1,551 @@
+{
+  "lectureId": "lecture-03-block-ciphers-and-modes",
+  "lectureTitle": "Block Ciphers and Modes of Operation",
+  "lectureNumber": 3,
+  "topics": [
+    "Block Cipher Definition",
+    "AES Parameters",
+    "Block Cipher Correctness (Bijectivity)",
+    "Block Cipher Security (Random Permutation)",
+    "Brute-Force Resistance",
+    "Block Cipher and IND-CPA",
+    "ECB Mode",
+    "CBC Mode Encryption",
+    "CBC Mode Decryption",
+    "CBC Padding",
+    "CBC IV Reuse",
+    "CBC Parallelism",
+    "CTR Mode Construction",
+    "CTR Mode Padding",
+    "CTR Nonce Reuse",
+    "Comparing CBC and CTR",
+    "IVs vs. Nonces",
+    "Lack of Integrity in CTR",
+    "Lack of Integrity in CBC",
+    "ECB Penguin",
+    "Mode Selection Trade-offs"
+  ],
+  "questions": [
+    {
+      "id": "L03-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Block Cipher Definition",
+      "stem": "A block cipher takes a $k$-bit key $K$ and an $n$-bit plaintext $M$ and produces an $n$-bit ciphertext $C$. Mechanistically, why must $E_K$ behave as a *permutation* on $n$-bit strings when $K$ is fixed?",
+      "choices": [
+        {"id": "A", "text": "So that the ciphertext can be larger than the plaintext to add randomness."},
+        {"id": "B", "text": "So that decryption is unambiguous: each ciphertext maps back to exactly one plaintext."},
+        {"id": "C", "text": "So that the cipher resists brute-force attacks on the key."},
+        {"id": "D", "text": "So that the same key can be used for encryption and authentication."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A permutation is a bijection on $n$-bit strings. If $E_K$ were not bijective, two distinct plaintexts could map to the same ciphertext, and Bob would have no way to know which plaintext to recover. Bijectivity guarantees $D_K$ is well-defined.",
+      "distractorAnalysis": {
+        "A": "**Definition Mismatch** — The block cipher output is exactly $n$ bits, the same size as the input; randomness is added by modes of operation, not the cipher itself.",
+        "C": "**Goal Conflation** — Brute-force resistance comes from the size of the key space, not bijectivity.",
+        "D": "**Category Error** — Block ciphers provide confidentiality, not authentication; integrity needs MACs."
+      },
+      "trapCategories": [
+        "category-error",
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "AES Parameters",
+      "stem": "Slide 15 states that AES has a fixed 128-bit block size regardless of which key length is used. If a student says \"AES-256 uses a 256-bit block,\" what is the precise correction?",
+      "choices": [
+        {"id": "A", "text": "AES-256 uses a 192-bit block to balance the larger key."},
+        {"id": "B", "text": "AES-256 has a 256-bit block; the number always refers to the block size."},
+        {"id": "C", "text": "The 256 refers only to the key size; the block size is always 128 bits in AES."},
+        {"id": "D", "text": "AES has no fixed block size; it adapts based on the message."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "AES-128, AES-192, and AES-256 all share the same 128-bit block; only the key length and number of rounds change. The number in the name refers to key bits, not block bits.",
+      "distractorAnalysis": {
+        "A": "**Plausible Misconception** — There is no 192-bit AES variant for blocks; only key sizes vary.",
+        "B": "**Definition Swap** — Confuses key length with block length.",
+        "D": "**Absolutist Error** — Block ciphers are by definition fixed-block algorithms; modes of operation handle long messages."
+      },
+      "trapCategories": [
+        "definition-match",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Block Cipher Security (Random Permutation)",
+      "stem": "A secure block cipher should be \"computationally indistinguishable from a random permutation.\" In the distinguishing game, Eve gets two boxes: one is $E_K$ with a random key and the other is a uniformly random permutation. What is the security requirement?",
+      "choices": [
+        {"id": "A", "text": "Eve must be able to identify $E_K$ in fewer than $2^n$ queries."},
+        {"id": "B", "text": "Eve cannot tell the boxes apart with probability significantly greater than $1/2$."},
+        {"id": "C", "text": "Eve must be unable to invert either box without the key."},
+        {"id": "D", "text": "The two boxes must produce identical output on all $2^n$ inputs."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Indistinguishability means Eve's advantage over a 50/50 coin flip is negligible. If she can detect any structure that distinguishes $E_K$ from a true random permutation, the cipher is broken.",
+      "distractorAnalysis": {
+        "A": "**Misframed Goal** — The game is about distinguishing, not key recovery.",
+        "C": "**Different Property** — One-wayness is a hash property; block ciphers are about indistinguishability.",
+        "D": "**Logical Impossibility** — Two distinct permutations cannot be identical on all inputs while being independently chosen."
+      },
+      "trapCategories": [
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Brute-Force Resistance",
+      "stem": "Slide 13 walks through brute-forcing a 128-bit key using hardware that tries $10^{18}$ keys per second. Mechanistically, why is this calculation enough to declare the brute-force attack \"infeasible\" without further proof?",
+      "choices": [
+        {"id": "A", "text": "Because $10^{21}$ seconds exceeds the age of the universe by many orders of magnitude, making the attack physically impossible within any meaningful timeframe."},
+        {"id": "B", "text": "Because the attack would consume too much electricity to be cost-effective today."},
+        {"id": "C", "text": "Because Moore's Law guarantees the hardware will improve before the attack finishes."},
+        {"id": "D", "text": "Because all keys must be tried in sequence; no parallelism is possible."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "$10^{21}$ seconds is roughly $3 \\times 10^{13}$ years — about 30 trillion years, vastly longer than the ~$1.4 \\times 10^{10}$-year age of the universe. The argument is about absolute time, not cost.",
+      "distractorAnalysis": {
+        "B": "**Weaker Argument** — Cost matters but isn't the formal reason; the time bound is the airtight one.",
+        "C": "**Reverse Logic** — Faster hardware would *help* the attacker, not hurt them.",
+        "D": "**False Premise** — Brute-force attacks are embarrassingly parallel; the calculation already assumes massive parallelism."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q05",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Block Cipher and IND-CPA",
+      "stem": "Slide 17 shows that a raw block cipher is not IND-CPA secure. Walk through Eve's winning strategy: she sends $M_0, M_1$, receives $C^* = E_K(M_b)$, then asks for the encryption of which message?",
+      "choices": [
+        {"id": "A", "text": "A new random message and check whether the ciphertext is shorter than $C^*$."},
+        {"id": "B", "text": "$M_0$ again, then check whether the new ciphertext equals $C^*$. If yes, $b=0$; otherwise $b=1$."},
+        {"id": "C", "text": "$M_0 \\oplus M_1$ to recover $K$ from the result."},
+        {"id": "D", "text": "$M_0 || M_1$ and look for repeated blocks in the output."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Block ciphers are deterministic: $E_K(M_0)$ always produces the same ciphertext. Eve queries $E_K(M_0)$ and compares to $C^*$. If they match, $b = 0$ with probability 1; otherwise $b = 1$.",
+      "distractorAnalysis": {
+        "A": "**Irrelevant** — All ciphertexts are exactly $n$ bits; length carries no information.",
+        "C": "**Non-mechanism** — XORing plaintexts and asking for that encryption does not reveal $K$ for a generic block cipher.",
+        "D": "**Wrong Test** — The IND-CPA game is decided by the single $C^*$ versus what Eve can derive about $b$, not by structural patterns inside concatenations."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q06",
+      "type": "DIAGRAM",
+      "difficulty": "Foundational",
+      "topic": "ECB Mode",
+      "stem": "In the ECB encryption diagram (Slide 25), each plaintext block $M_i$ is independently encrypted with the same key $K$ to produce $C_i$. What is the immediate visual consequence on the encrypted-penguin image (Slide 27)?",
+      "choices": [
+        {"id": "A", "text": "The penguin outline disappears entirely because each block looks random."},
+        {"id": "B", "text": "The penguin outline remains visible because identical plaintext blocks produce identical ciphertext blocks."},
+        {"id": "C", "text": "The penguin appears upside-down due to bit-reversal."},
+        {"id": "D", "text": "The penguin is replaced with the AES round constants."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "ECB is deterministic per block. Large solid-colored regions of the image consist of many identical blocks, all of which encrypt to the same ciphertext block. The repeated pattern survives encryption and reveals the silhouette.",
+      "distractorAnalysis": {
+        "A": "**Opposite Outcome** — That is what CBC/CTR achieve, not ECB.",
+        "C": "**Nonsense Trap** — Block ciphers do not perform geometric inversions.",
+        "D": "**Irrelevant** — Round constants are AES internals, not visible in ciphertext output."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q07",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CBC Mode Encryption",
+      "stem": "CBC encryption is defined $C_i = E_K(M_i \\oplus C_{i-1})$ with $C_0 = IV$. What specific role does the IV play in defeating the deterministic-output problem ECB suffers from?",
+      "choices": [
+        {"id": "A", "text": "It is a checksum that detects tampering with the ciphertext."},
+        {"id": "B", "text": "It randomizes the input to the first block cipher invocation, so the same plaintext encrypted twice produces different ciphertexts."},
+        {"id": "C", "text": "It selects which AES key schedule to use for that message."},
+        {"id": "D", "text": "It pads the final block to a multiple of the block size."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "A fresh random IV makes $M_1 \\oplus IV$ different on every encryption, so $C_1 = E_K(M_1 \\oplus IV)$ differs every time. That randomness then chains forward through all subsequent blocks via $C_i = E_K(M_i \\oplus C_{i-1})$.",
+      "distractorAnalysis": {
+        "A": "**Goal Conflation** — IVs do not detect tampering; that requires a MAC.",
+        "C": "**Mechanism Error** — AES key schedule depends only on the key, never on the IV.",
+        "D": "**Different Concept** — Padding handles size, not randomness."
+      },
+      "trapCategories": [
+        "category-error",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q08",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CBC Mode Decryption",
+      "stem": "Slide 34 derives CBC decryption: $M_i = D_K(C_i) \\oplus C_{i-1}$. Why does decryption use the *previous ciphertext block* rather than the previous plaintext block?",
+      "choices": [
+        {"id": "A", "text": "Because decryption must operate on whatever the receiver actually has, and the receiver only has ciphertext until decryption is complete."},
+        {"id": "B", "text": "Because plaintext blocks are XORed with the key, so they cannot appear in the formula."},
+        {"id": "C", "text": "Because CBC alternates direction every block."},
+        {"id": "D", "text": "Because $D_K$ requires the previous round constants to be regenerated."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "The receiver parses ciphertext as $(IV, C_1, \\dots, C_j)$ and has no plaintext yet. Algebraically, $M_i = D_K(E_K(M_i \\oplus C_{i-1})) \\oplus C_{i-1} \\oplus C_{i-1} = M_i$ — the previous ciphertext is the value Bob actually has.",
+      "distractorAnalysis": {
+        "B": "**Wrong Operation** — Block cipher encryption is not an XOR with the key.",
+        "C": "**Made-up Behavior** — There is no directional alternation in CBC.",
+        "D": "**Irrelevant Internal** — Round constants are deterministic given the key; nothing needs the previous plaintext."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q09",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "CBC Padding",
+      "stem": "PKCS-style padding pads with the *number* of padding bytes (e.g., 3 bytes of `0x03`). If a message is already an exact multiple of the block size, what does the padding rule require?",
+      "choices": [
+        {"id": "A", "text": "No padding is added; the message is sent as-is."},
+        {"id": "B", "text": "A single zero byte is appended."},
+        {"id": "C", "text": "An entire dummy padding block is added so the unpadder can always strip exactly the indicated number of bytes."},
+        {"id": "D", "text": "The first block is duplicated to act as padding."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "If we appended nothing when the size already aligned, the unpadder would have no way to know whether the last byte is real or padding. Always appending a full padding block (e.g., 16 bytes of `0x10` for AES) makes unpadding unambiguous.",
+      "distractorAnalysis": {
+        "A": "**Ambiguity Trap** — Skipping padding makes the last bytes ambiguous to the unpadder.",
+        "B": "**Insufficient** — A single zero would conflict with messages that legitimately end in zero.",
+        "D": "**Nonsense Trap** — Duplicating the first block has no relationship to padding length."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "CBC IV Reuse",
+      "stem": "Slide 39 shows Alice encrypting two three-block messages $P_1 P_2 P_3$ and $P_1 P_2 P_4$ with the *same* IV. What does Eve learn from observing the two ciphertexts?",
+      "choices": [
+        {"id": "A", "text": "She recovers the secret key $K$."},
+        {"id": "B", "text": "She learns that the two messages share an identical prefix up to (but not including) the first differing block."},
+        {"id": "C", "text": "She learns the entire plaintext of both messages."},
+        {"id": "D", "text": "She learns nothing because CBC is IND-CPA secure even with IV reuse."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "With identical $IV$, $P_1 \\oplus IV$ is identical for both messages, so $C_1$ is identical. Then $P_2 \\oplus C_1$ is identical, so $C_2$ is identical. Once the plaintexts diverge, the chained ciphertexts diverge, so Eve sees the prefix-matching pattern but not the underlying values.",
+      "distractorAnalysis": {
+        "A": "**Catastrophic Overstatement** — IV reuse in CBC leaks prefix patterns, not the key.",
+        "C": "**Overstatement** — CTR with nonce reuse leaks plaintexts; CBC is not as catastrophic.",
+        "D": "**False** — IV reuse explicitly breaks IND-CPA because Eve can detect identical prefixes."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q11",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CBC Parallelism",
+      "stem": "CBC encryption cannot be parallelized, but CBC decryption can. Mechanistically, why does the asymmetry exist?",
+      "choices": [
+        {"id": "A", "text": "Encryption uses $E_K$, which is intrinsically sequential, while $D_K$ is parallel by construction."},
+        {"id": "B", "text": "Encrypting block $i$ requires $C_{i-1}$, which is itself an output, but decrypting block $i$ requires $C_{i-1}$, which the receiver already has as input."},
+        {"id": "C", "text": "The IV must be re-randomized between every encryption block."},
+        {"id": "D", "text": "Decryption skips the chaining step entirely."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Encryption depends on the *output* of the previous block (a value not yet computed), forcing sequencing. Decryption depends on the *input* ciphertext blocks, which are all received up front and can be processed in parallel.",
+      "distractorAnalysis": {
+        "A": "**Wrong Property** — $E_K$ and $D_K$ are equally parallel-friendly as primitives; the chaining is what matters.",
+        "C": "**Wrong Mechanism** — One IV per message, not per block.",
+        "D": "**False** — Decryption still XORs with $C_{i-1}$; chaining is preserved, just not on a forward dependency."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q12",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "CTR Mode Construction",
+      "stem": "In the CTR diagram (Slide 50), the inputs to the block cipher are a (Nonce, Counter) pair, and the output is XORed with the plaintext. Which block cipher operation is used for *decryption* in CTR mode?",
+      "choices": [
+        {"id": "A", "text": "$D_K$, the block cipher decryption function."},
+        {"id": "B", "text": "$E_K$, the block cipher encryption function."},
+        {"id": "C", "text": "Both $E_K$ and $D_K$, alternating per block."},
+        {"id": "D", "text": "Neither; CTR uses only XOR."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "CTR generates a keystream by encrypting nonce-counter pairs with $E_K$, then XORs that keystream with plaintext or ciphertext. Because XOR is its own inverse, decryption regenerates the same keystream with $E_K$ and XORs again — never invoking $D_K$.",
+      "distractorAnalysis": {
+        "A": "**Common Misconception** — Many students assume decryption uses $D_K$, but CTR converts a block cipher into a stream cipher, so only $E_K$ is needed.",
+        "C": "**Made-up Behavior** — There is no alternation in CTR.",
+        "D": "**Underspecified** — XOR alone is not enough; you still need $E_K$ to produce the keystream."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "CTR Mode Padding",
+      "stem": "CTR mode does not require message padding, but CBC does. What property of CTR makes padding unnecessary?",
+      "choices": [
+        {"id": "A", "text": "CTR pads internally with random bytes."},
+        {"id": "B", "text": "CTR produces a keystream the same length as the plaintext, and any extra keystream bits are simply discarded."},
+        {"id": "C", "text": "CTR uses variable-length block sizes that adapt to the message."},
+        {"id": "D", "text": "CTR requires the message to be exactly $2^{64}$ bytes."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Because CTR is essentially a one-time pad keyed by $E_K(\\text{nonce}||\\text{counter})$, you only need as many keystream bits as you have plaintext bits. Extra keystream is truncated, so the ciphertext length matches the plaintext length exactly.",
+      "distractorAnalysis": {
+        "A": "**False** — There is no internal padding in CTR.",
+        "C": "**False** — The block cipher block size is fixed at $n$ bits; CTR works around it.",
+        "D": "**Nonsense Constraint** — There is no such fixed message-length requirement."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q14",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "CTR Nonce Reuse",
+      "stem": "Slide 56 warns that nonce reuse in AES-CTR is \"catastrophic.\" Why is the failure mode for CTR worse than for CBC under analogous IV reuse?",
+      "choices": [
+        {"id": "A", "text": "Because CTR uses a longer key, so failures cascade further."},
+        {"id": "B", "text": "Because CTR effectively becomes a two-time pad — XORing two ciphertexts cancels the keystream and exposes $M_1 \\oplus M_2$."},
+        {"id": "C", "text": "Because CTR requires $D_K$ to recover plaintext, and $D_K$ leaks the key on reuse."},
+        {"id": "D", "text": "Because CBC has no IV, so there is nothing to reuse."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "If $C_1 = M_1 \\oplus K_s$ and $C_2 = M_2 \\oplus K_s$ for the same keystream $K_s$, then $C_1 \\oplus C_2 = M_1 \\oplus M_2$ — exactly the OTP key-reuse failure. Crib-dragging often recovers both messages.",
+      "distractorAnalysis": {
+        "A": "**Irrelevant** — Key length is unrelated to nonce reuse.",
+        "C": "**False Mechanism** — CTR uses $E_K$ only; $D_K$ is never invoked.",
+        "D": "**False** — CBC explicitly uses an IV; that's the entire point of Slide 39."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q15",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Comparing CBC and CTR",
+      "stem": "Slide 60 argues that even though CBC and CTR are theoretically equally secure, CBC is preferable when you are \"paranoid about security.\" What human-factors argument supports preferring CBC?",
+      "choices": [
+        {"id": "A", "text": "CBC is faster, so attackers have less time to act."},
+        {"id": "B", "text": "Under IV/nonce reuse — a likely real-world implementation mistake — CBC leaks only limited prefix information, while CTR fails completely."},
+        {"id": "C", "text": "CBC includes a built-in MAC for integrity."},
+        {"id": "D", "text": "CTR is patented and CBC is open-source."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Real-world IV/nonce mistakes happen. Defense-in-depth says: pick the mode whose worst-case-misuse failure is the least catastrophic. CBC's prefix leak is bounded; CTR's two-time-pad failure is total.",
+      "distractorAnalysis": {
+        "A": "**Opposite Fact** — CTR is faster (parallelizable on encryption); speed is not the security argument.",
+        "C": "**False** — Neither CBC nor CTR provides integrity; both need a separate MAC.",
+        "D": "**False** — Neither is patented; both are open standards."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q16",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "IVs vs. Nonces",
+      "stem": "Slide 58 draws a subtle distinction between IVs and nonces. What is the formal difference?",
+      "choices": [
+        {"id": "A", "text": "IVs must be encrypted; nonces are sent in the clear."},
+        {"id": "B", "text": "IVs must be random and one-use; nonces only need to be unique (number used once), not necessarily random."},
+        {"id": "C", "text": "IVs are 128 bits; nonces are 64 bits."},
+        {"id": "D", "text": "IVs are used for authentication; nonces for confidentiality."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "An IV is randomly generated for each encryption (used in CBC). A nonce only needs to be unique across encryptions — it could be a counter, for example. The course uses the terms interchangeably, but the formal distinction matters for some constructions.",
+      "distractorAnalysis": {
+        "A": "**False** — Both are public; both are sent alongside the ciphertext.",
+        "C": "**Made-up Sizes** — Lengths depend on the algorithm, not the term used.",
+        "D": "**Goal Conflation** — Both are about confidentiality (preventing key/keystream reuse)."
+      },
+      "trapCategories": [
+        "definition-match",
+        "hedged-language"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q17",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Lack of Integrity in CTR",
+      "stem": "Slides 62–65 demonstrate Mallory changing \"Pay Mal \\$100\" to \"Pay Mal \\$900\" by flipping a single ciphertext byte from `0x58` to `0x50`. What is the precise mechanism?",
+      "choices": [
+        {"id": "A", "text": "Mallory recovered the key by analyzing repeated bytes in the ciphertext."},
+        {"id": "B", "text": "Mallory XORed the target byte position with $0x01 \\oplus 0x09 = 0x08$, which propagates through the keystream as $C' \\oplus E_K(i) = 0x39$, the ASCII for '9'."},
+        {"id": "C", "text": "Mallory replaced the entire ciphertext block with a random one."},
+        {"id": "D", "text": "Mallory needed to know the key to perform this attack."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Because $C = M \\oplus E_K(i)$, flipping bits in $C$ flips the same bits in the decrypted $M'$. To turn '1' (`0x31`) into '9' (`0x39`), flip the bit difference (`0x08`) — accomplished by XORing the ciphertext byte with `0x08`, changing `0x58` to `0x50`. No key knowledge required.",
+      "distractorAnalysis": {
+        "A": "**False** — Mallory never recovers the key; she exploits XOR linearity.",
+        "C": "**Wrong Granularity** — The attack is byte-precise; replacing whole blocks would scramble the message.",
+        "D": "**Critical Misunderstanding** — The whole point of the example is that Mallory does *not* need the key."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q18",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Lack of Integrity in CBC",
+      "stem": "Slide 66 notes that altering a CBC ciphertext bit causes \"some blocks to become random gibberish.\" Which property does this *NOT* provide?",
+      "choices": [
+        {"id": "A", "text": "Confidentiality of the original plaintext."},
+        {"id": "B", "text": "Integrity, because Bob cannot prove that Alice did not intend to send gibberish."},
+        {"id": "C", "text": "IND-CPA security under proper IV usage."},
+        {"id": "D", "text": "Recoverability of the modified ciphertext block via inverse XOR."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Producing gibberish is not the same as detecting tampering. Bob has no way to distinguish \"Alice sent gibberish\" from \"Mallory tampered with a real message,\" so CBC alone does not provide integrity.",
+      "distractorAnalysis": {
+        "A": "**Provided** — CBC with a proper IV does provide IND-CPA confidentiality.",
+        "C": "**Provided** — CBC is IND-CPA secure when the IV is fresh and random.",
+        "D": "**Mechanism, not goal** — XOR inversion is a property of the operation, not a goal CBC must satisfy."
+      },
+      "trapCategories": [
+        "not-provide-test",
+        "not-provide-trap"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q19",
+      "type": "APPLICATION",
+      "difficulty": "Advanced",
+      "topic": "Mode Selection Trade-offs",
+      "stem": "You are designing a high-throughput streaming-video encryption system that processes data faster than it arrives. Padding latency must be zero, and decryption of arbitrary 1-second segments must be possible. Which mode best fits?",
+      "choices": [
+        {"id": "A", "text": "ECB, because it has no chaining."},
+        {"id": "B", "text": "CBC, because it provides better security under reuse."},
+        {"id": "C", "text": "CTR, because encryption and decryption are parallelizable, no padding is required, and arbitrary segments can be decrypted independently."},
+        {"id": "D", "text": "Raw AES with no mode."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "CTR's no-padding requirement, full parallelism, and per-block independence make it ideal for streaming and random-access decryption. Random-access decryption is impossible in CBC because each block depends on the previous ciphertext.",
+      "distractorAnalysis": {
+        "A": "**Insecure** — ECB is not IND-CPA secure (Slide 27 penguin proves this).",
+        "B": "**Wrong Trade-off** — CBC needs padding and serial encryption; bad fit for streaming.",
+        "D": "**Not a real option** — Raw AES can only encrypt single 128-bit blocks."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L03-Q20",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Mode Selection Trade-offs",
+      "stem": "After studying all four points (ECB insecurity, CBC chaining, CTR keystream model, lack of integrity in both), which architectural conclusion follows?",
+      "choices": [
+        {"id": "A", "text": "Block ciphers in any mode are sufficient for both confidentiality and integrity if the key is long enough."},
+        {"id": "B", "text": "You should always pair an IND-CPA mode (CBC or CTR) with a separate MAC, or use an authenticated encryption mode like GCM, to obtain both confidentiality and integrity."},
+        {"id": "C", "text": "ECB is acceptable when the plaintext has no repeating blocks."},
+        {"id": "D", "text": "Stream ciphers and block ciphers are interchangeable in all settings."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Lecture 03 establishes that confidentiality modes alone never provide integrity, motivating the next lecture's MAC and AEAD discussion. The systems-design takeaway is: never deploy CBC/CTR without a MAC.",
+      "distractorAnalysis": {
+        "A": "**Absolutist Trap** — Key length addresses brute force, not integrity.",
+        "C": "**Risky Heuristic** — Whether the plaintext has repeating blocks is hard to verify and changes over time; ECB is simply not safe to use.",
+        "D": "**Overgeneralization** — Stream and block ciphers have different operating modes, padding behavior, and integrity properties."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}

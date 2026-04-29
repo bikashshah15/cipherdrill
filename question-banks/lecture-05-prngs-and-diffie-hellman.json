@@ -1,0 +1,539 @@
+{
+  "lectureId": "lecture-05-prngs-and-diffie-hellman",
+  "lectureTitle": "PRNGs and Diffie-Hellman Key Exchange",
+  "lectureNumber": 5,
+  "topics": [
+    "Entropy",
+    "True Randomness Sources",
+    "PRNG Definition",
+    "PRNG Seeding and Reseeding",
+    "PRNG Security Definition",
+    "Rollback Resistance",
+    "Insecure PRNGs",
+    "UUIDs as PRNG Application",
+    "Stream Cipher Construction",
+    "Stream Ciphers Multi-Message Encryption",
+    "AES-CTR as Stream Cipher",
+    "Stream Cipher Random Access Decryption",
+    "Stream Cipher Counter Wraparound",
+    "Discrete Log Problem",
+    "Diffie-Hellman Assumption",
+    "Diffie-Hellman Protocol",
+    "Diffie-Hellman Forward Secrecy",
+    "Diffie-Hellman MITM Attack",
+    "Diffie-Hellman Limitations"
+  ],
+  "questions": [
+    {
+      "id": "L05-Q01",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Entropy",
+      "stem": "Slide 6 defines entropy as a measure of unpredictability. Which distribution maximizes entropy over a fixed-size output space?",
+      "choices": [
+        {"id": "A", "text": "A distribution that always returns the same value."},
+        {"id": "B", "text": "A uniform distribution where every outcome is equally likely."},
+        {"id": "C", "text": "A distribution biased toward zero."},
+        {"id": "D", "text": "A Gaussian distribution centered on the median."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Entropy is maximized when the attacker has no information at all about the next outcome — that is, when every outcome is equally probable. A uniform distribution achieves this; biased or constant distributions reduce entropy.",
+      "distractorAnalysis": {
+        "A": "**Zero Entropy** — A constant has 0 bits of entropy.",
+        "C": "**Bias = Less Entropy** — Skew gives the attacker information.",
+        "D": "**Wrong Domain** — Gaussians are continuous; over a finite output space, uniform is optimal."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q02",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "True Randomness Sources",
+      "stem": "Why does Slide 7 emphasize \"combining multiple entropy sources\" rather than relying on a single physical source like a CPU noise circuit?",
+      "choices": [
+        {"id": "A", "text": "Because no single physical source is unbiased; combining multiple sources lets the total entropy approach the sum of all source entropies, hedging against any single source being weak."},
+        {"id": "B", "text": "Because multiple sources are faster than one source."},
+        {"id": "C", "text": "Because cryptographic regulations require at least three sources."},
+        {"id": "D", "text": "Because combining sources eliminates the need for a PRNG."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Physical sources are typically biased (a noisy circuit might lean toward 0). Combining via XOR or hashing means a single low-entropy source cannot reduce the total: many poor sources + one good source = good entropy.",
+      "distractorAnalysis": {
+        "B": "**Wrong Goal** — Combining is for quality, not speed.",
+        "C": "**False** — No such regulation exists.",
+        "D": "**Wrong Conclusion** — PRNG is still needed to expand the seed cheaply."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q03",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "PRNG Definition",
+      "stem": "A PRNG has three operations: $\\text{Seed}$, $\\text{Reseed}$, and $\\text{Generate}$. What is the purpose of $\\text{Reseed}$?",
+      "choices": [
+        {"id": "A", "text": "To restart the PRNG from scratch with a brand-new key."},
+        {"id": "B", "text": "To add additional entropy to the existing internal state as more becomes available."},
+        {"id": "C", "text": "To reset the counter to zero for cryptographic safety."},
+        {"id": "D", "text": "To verify that the PRNG output is uniform."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Reseeding folds new entropy into the existing internal state. Crucially, reseeding with 0 entropy must not reduce the state's entropy — a property carefully designed into compliant PRNGs.",
+      "distractorAnalysis": {
+        "A": "**Different Operation** — That's $\\text{Seed}$, not $\\text{Reseed}$.",
+        "C": "**Made-up** — PRNGs don't have user-facing counters.",
+        "D": "**Wrong Function** — Verification is not part of the PRNG interface."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q04",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "PRNG Security Definition",
+      "stem": "Slide 11 says a PRNG \"cannot be truly random\" because the output is determined by the initial seed. What is the correct security goal instead?",
+      "choices": [
+        {"id": "A", "text": "Computational indistinguishability: an attacker without the internal state cannot distinguish PRNG output from truly random bits."},
+        {"id": "B", "text": "Information-theoretic randomness: the output has provably infinite entropy."},
+        {"id": "C", "text": "The seed must be at least $2^n$ bits long."},
+        {"id": "D", "text": "The PRNG must be reversible by the user."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Because the PRNG is deterministic given its seed, true randomness is impossible. Security is defined relative to a polynomial-time attacker who cannot distinguish the output from uniform with non-negligible advantage.",
+      "distractorAnalysis": {
+        "B": "**Impossible** — Finite seeds give finite output entropy.",
+        "C": "**Made-up Constraint** — Seed is typically a few hundred bits.",
+        "D": "**Wrong Property** — Reversibility would be catastrophic."
+      },
+      "trapCategories": [
+        "definition-match",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q05",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Rollback Resistance",
+      "stem": "Slide 12 defines rollback resistance: even if Mallory learns the current internal state, she cannot recover *previous* outputs. Why is this property valuable in practice?",
+      "choices": [
+        {"id": "A", "text": "Because past outputs (e.g., the secret key generated yesterday) would otherwise be recoverable from a present compromise — undermining anything derived from earlier PRNG output."},
+        {"id": "B", "text": "Because it makes the PRNG faster."},
+        {"id": "C", "text": "Because it allows multi-threaded PRNG calls."},
+        {"id": "D", "text": "Because it increases the seed entropy."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "If Alice generated a secret key from the PRNG yesterday and Mallory compromises today's state, a non-rollback-resistant PRNG would let Mallory derive yesterday's key. Rollback resistance limits the blast radius of state compromise to the present and future, not the past.",
+      "distractorAnalysis": {
+        "B": "**Irrelevant** — Speed and rollback resistance are independent.",
+        "C": "**Different Property** — Concurrency is unrelated to rollback resistance.",
+        "D": "**Confused** — Rollback resistance is a state-update property, not an entropy property."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q06",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Core",
+      "topic": "Insecure PRNGs",
+      "stem": "Slide 13 critiques Rust's `rand_core` ChaCha8Rng as insecure despite being labeled \"secure.\" Which combination of failures is correct?",
+      "choices": [
+        {"id": "A", "text": "It uses a broken hash function and accepts only 32-bit seeds."},
+        {"id": "B", "text": "It has no $\\text{Reseed}$ function (no way to add entropy after seeding), accepts only a 32-bit seed (no entropy combining), and lacks rollback resistance."},
+        {"id": "C", "text": "It is too slow for production use."},
+        {"id": "D", "text": "It exposes the seed in its public API."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The slide enumerates exactly these three deficiencies. The label \"cryptographically secure\" is misleading because the API does not support reseeding, doesn't accept arbitrary-length seeds for entropy combining, and lacks rollback resistance.",
+      "distractorAnalysis": {
+        "A": "**Wrong Mechanism** — ChaCha8 is the underlying primitive, not a hash; the issue is the API.",
+        "C": "**Opposite** — It is fast; that is part of why it's tempting to use.",
+        "D": "**False** — Seed exposure isn't the issue."
+      },
+      "trapCategories": [
+        "absolutist-language",
+        "distractor-focused"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q07",
+      "type": "APPLICATION",
+      "difficulty": "Foundational",
+      "topic": "UUIDs as PRNG Application",
+      "stem": "UUIDs are 128-bit values intended to be unique without coordination. What property of a properly seeded PRNG makes UUID generation safe?",
+      "choices": [
+        {"id": "A", "text": "Determinism: same seed always produces the same UUID."},
+        {"id": "B", "text": "Computational indistinguishability from uniform 128-bit values, which makes the probability of collision astronomically small."},
+        {"id": "C", "text": "The PRNG outputs are always strictly increasing."},
+        {"id": "D", "text": "The seed is larger than 128 bits."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "If outputs are indistinguishable from uniform, the birthday-bound collision probability requires generating ~$2^{64}$ UUIDs before any collision becomes likely — effectively impossible in practice.",
+      "distractorAnalysis": {
+        "A": "**Wrong Goal** — Determinism is the *opposite* of what we want for unique IDs.",
+        "C": "**Made-up Property** — PRNG outputs are not monotonically increasing.",
+        "D": "**Irrelevant Constraint** — Seed size and output size are separate concerns."
+      },
+      "trapCategories": [
+        "applied-scenario"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q08",
+      "type": "DIAGRAM",
+      "difficulty": "Core",
+      "topic": "Stream Cipher Construction",
+      "stem": "In the stream cipher diagram (Slide 18), Alice and Bob both perform $\\text{Seed}(K)$ and then $\\text{Generate}(n)$, XORing the result with plaintext / ciphertext respectively. Why must they use the same $K$?",
+      "choices": [
+        {"id": "A", "text": "Because XOR requires identical operands."},
+        {"id": "B", "text": "Because the PRNG is deterministic given the seed; only matching seeds produce matching keystreams that cancel correctly during decryption."},
+        {"id": "C", "text": "Because public keys must match across both sides."},
+        {"id": "D", "text": "Because the protocol verifies $K$ before sending ciphertext."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Stream ciphers are PRNG-keyed one-time pads. Alice's $\\text{Generate}(n)$ output must equal Bob's $\\text{Generate}(n)$ output for $C \\oplus \\text{ks} = M$. Since the PRNG is deterministic, this requires identical seeds.",
+      "distractorAnalysis": {
+        "A": "**Wrong Reason** — XOR works on any equal-length operands; the issue is producing the *same* keystream.",
+        "C": "**Wrong Model** — Stream ciphers are symmetric, not asymmetric.",
+        "D": "**False** — There is no protocol verification step."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q09",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Stream Ciphers Multi-Message Encryption",
+      "stem": "Slide 20 fixes the multi-message reuse problem by seeding the PRNG with $K \\| IV$ for each message. Why is this construction safe?",
+      "choices": [
+        {"id": "A", "text": "Because the IV is encrypted with $K$ before transmission."},
+        {"id": "B", "text": "Because a fresh IV per message ensures the PRNG starts from a different seed each time, producing a non-reused keystream — even though $K$ is reused."},
+        {"id": "C", "text": "Because $K \\| IV$ doubles the effective key size."},
+        {"id": "D", "text": "Because the IV acts as a MAC."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Reusing a stream cipher keystream is catastrophic (two-time pad). Fresh IVs per message produce fresh seeds, hence fresh keystreams. The IV is sent in the clear so Bob can recompute the same seed.",
+      "distractorAnalysis": {
+        "A": "**False** — IVs are public.",
+        "C": "**Wrong Reason** — Concatenation length isn't the security argument.",
+        "D": "**Goal Conflation** — IV is for randomness, not authentication."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q10",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "AES-CTR as Stream Cipher",
+      "stem": "Slide 21 frames AES-CTR as a type of stream cipher. What plays the role of the PRNG, and what plays the role of the keystream?",
+      "choices": [
+        {"id": "A", "text": "The PRNG is $E_K$ applied to (nonce, counter); the keystream is the resulting block-cipher output that gets XORed with plaintext."},
+        {"id": "B", "text": "The PRNG is the XOR operation; the keystream is the plaintext."},
+        {"id": "C", "text": "The PRNG is the nonce; the keystream is the counter."},
+        {"id": "D", "text": "The PRNG is $D_K$; the keystream is the recovered plaintext."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "$E_K(\\text{nonce} \\| i)$ produces a pseudorandom block per counter value $i$. Concatenated, these blocks form the keystream that is XORed against the plaintext.",
+      "distractorAnalysis": {
+        "B": "**Confused Roles** — XOR is the combiner, not the PRNG.",
+        "C": "**Wrong Mapping** — Nonce and counter are inputs, not the PRNG/keystream.",
+        "D": "**Wrong Direction** — CTR uses $E_K$ even for decryption."
+      },
+      "trapCategories": [
+        "diagram-reading",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q11",
+      "type": "APPLICATION",
+      "difficulty": "Core",
+      "topic": "Stream Cipher Random Access Decryption",
+      "stem": "Slide 24 says you can decrypt only block $i$ of an AES-CTR ciphertext without decrypting the whole thing. What is the per-block decryption procedure?",
+      "choices": [
+        {"id": "A", "text": "Compute $D_K(C_i)$ to recover $M_i$."},
+        {"id": "B", "text": "Compute $E_K(\\text{nonce} \\| i)$ and XOR with the $i$-th ciphertext block."},
+        {"id": "C", "text": "Decrypt blocks 1 through $i$ in sequence."},
+        {"id": "D", "text": "Re-derive the key from the nonce, then decrypt."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "CTR mode is per-block independent. To recover $M_i$, regenerate the keystream block at offset $i$ via $E_K(\\text{nonce} \\| i)$ and XOR with $C_i$. No prior blocks are needed.",
+      "distractorAnalysis": {
+        "A": "**Wrong Operation** — CTR doesn't use $D_K$.",
+        "C": "**Wrong Mode Behavior** — That would be CBC's chained dependency, not CTR's.",
+        "D": "**Confused** — Keys are not derived from nonces."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q12",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Stream Cipher Counter Wraparound",
+      "stem": "Slide 22 warns that AES-CTR with a 128-bit counter should stop after $\\approx 2^{64}$ blocks of output. Why this specific threshold?",
+      "choices": [
+        {"id": "A", "text": "Because counter wraparound is impossible until $2^{128}$."},
+        {"id": "B", "text": "Because of birthday-bound collisions on the (nonce, counter) inputs and to limit total exposure of any single key, cryptographic best practice caps a key's lifetime at roughly $2^{n/2}$ output blocks for an $n$-bit block cipher."},
+        {"id": "C", "text": "Because AES decryption fails after $2^{64}$ blocks."},
+        {"id": "D", "text": "Because $2^{64}$ is the maximum file size."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "After $2^{n/2}$ outputs, distinguishing advantages from $E_K$ stop being negligible due to birthday bounds on the random-permutation distinguisher. This is a structural cryptographic limit, not a counter overflow issue.",
+      "distractorAnalysis": {
+        "A": "**True but Irrelevant** — Wraparound at $2^{128}$ isn't the limit; $2^{64}$ is.",
+        "C": "**False** — AES doesn't fail mechanically.",
+        "D": "**Made-up** — File-system limits are unrelated."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q13",
+      "type": "MECHANISM",
+      "difficulty": "Foundational",
+      "topic": "Discrete Log Problem",
+      "stem": "The discrete log problem states: given $g$, $p$, and $g^a \\bmod p$ for random $a$, it is computationally hard to find $a$. What does this hardness assumption underwrite in Diffie-Hellman?",
+      "choices": [
+        {"id": "A", "text": "It guarantees that the prime $p$ is correctly chosen."},
+        {"id": "B", "text": "It ensures that an eavesdropper who sees $g^a \\bmod p$ cannot recover Alice's secret $a$, and similarly cannot recover $b$ from $g^b \\bmod p$."},
+        {"id": "C", "text": "It encrypts the shared secret."},
+        {"id": "D", "text": "It generates the public parameter $g$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "DH security rests on Eve seeing $g^a$ and $g^b$ in the clear without being able to invert either to recover $a$ or $b$. Without that hardness, Eve could compute $g^{ab}$ herself.",
+      "distractorAnalysis": {
+        "A": "**Wrong Role** — Prime selection is a separate, deterministic step.",
+        "C": "**Wrong Concept** — DH establishes the secret; it doesn't encrypt.",
+        "D": "**Wrong Role** — $g$ is fixed by convention, not derived from the discrete log."
+      },
+      "trapCategories": [
+        "definition-match"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q14",
+      "type": "GAME_WALK",
+      "difficulty": "Core",
+      "topic": "Diffie-Hellman Protocol",
+      "stem": "Walk through the Diffie-Hellman protocol with $p = 23, g = 5, a = 6, b = 15$. Bob computes $B = 5^{15} \\bmod 23 = 19$. What is Alice's computation of the shared secret $s$?",
+      "choices": [
+        {"id": "A", "text": "$s = 5^6 \\bmod 23 = 8$"},
+        {"id": "B", "text": "$s = 19^6 \\bmod 23 = 2$"},
+        {"id": "C", "text": "$s = 19 \\cdot 6 \\bmod 23 = 22$"},
+        {"id": "D", "text": "$s = 19 + 6 \\bmod 23 = 2$"}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Alice computes $s = B^a \\bmod p = 19^6 \\bmod 23$. Working it out: $19^6 = 47{,}045{,}881$, and $47{,}045{,}881 \\bmod 23 = 2$. Bob's computation $A^b \\bmod p = 8^{15} \\bmod 23$ also yields 2, confirming the shared secret.",
+      "distractorAnalysis": {
+        "A": "**Wrong Step** — That is Alice's *public* value $A$, not the shared secret.",
+        "C": "**Wrong Operation** — The protocol uses exponentiation, not multiplication.",
+        "D": "**Wrong Operation** — Addition modulo $p$ is not part of DH."
+      },
+      "trapCategories": [
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q15",
+      "type": "MECHANISM",
+      "difficulty": "Advanced",
+      "topic": "Diffie-Hellman Forward Secrecy",
+      "stem": "Slide 32 highlights that ephemeral DH (DHE) provides forward secrecy. What is the precise mechanism by which forward secrecy is achieved?",
+      "choices": [
+        {"id": "A", "text": "DH uses 4096-bit primes."},
+        {"id": "B", "text": "After the session, $a$, $b$, and the session key $K = g^{ab}$ are discarded; the recorded transcript only contains $g^a, g^b$, from which Eve cannot recompute $K$ even if she later compromises long-term secrets, because $a, b$ no longer exist."},
+        {"id": "C", "text": "DH encrypts the long-term key."},
+        {"id": "D", "text": "DH protocol messages are deleted from the network."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Forward secrecy requires that future compromise cannot decrypt past sessions. Because $a$ and $b$ are deleted after the session and $K$ is derived from them, recovering $K$ from $g^a, g^b$ alone requires solving the DH problem — which the assumption says is hard.",
+      "distractorAnalysis": {
+        "A": "**Adjacent** — Large primes give security but don't *cause* forward secrecy.",
+        "C": "**Wrong Mechanism** — DH establishes session keys; long-term keys are separate.",
+        "D": "**False** — Eve recorded everything by assumption."
+      },
+      "trapCategories": [
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q16",
+      "type": "GAME_WALK",
+      "difficulty": "Advanced",
+      "topic": "Diffie-Hellman MITM Attack",
+      "stem": "In the MITM attack on DH (Slide 33), Mallory sits between Alice and Bob. What does Mallory establish, and with whom?",
+      "choices": [
+        {"id": "A", "text": "A single key $g^{ab}$ shared with both Alice and Bob simultaneously."},
+        {"id": "B", "text": "Two separate keys: $g^{am}$ shared with Alice and $g^{bm}$ shared with Bob, with Mallory transparently relaying and re-encrypting messages."},
+        {"id": "C", "text": "Nothing; DH is MITM-resistant by construction."},
+        {"id": "D", "text": "Only Alice's private key $a$."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Mallory generates $m$, sends $g^m$ to both parties in place of the other party's value. Alice computes $g^{am}$ thinking it's $g^{ab}$; Bob computes $g^{bm}$. Mallory holds both keys and can decrypt, modify, and re-encrypt traffic in both directions.",
+      "distractorAnalysis": {
+        "A": "**Wrong** — There is no shared $g^{ab}$ in the MITM scenario.",
+        "C": "**False** — DH is explicitly *not* MITM-resistant; this is the lecture's main critique.",
+        "D": "**Wrong** — Mallory never recovers $a$; she just substitutes her own values."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "procedural-walkthrough"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q17",
+      "type": "NOT_PROVIDE",
+      "difficulty": "Core",
+      "topic": "Diffie-Hellman Limitations",
+      "stem": "Which property does plain Diffie-Hellman NOT provide?",
+      "choices": [
+        {"id": "A", "text": "Forward secrecy when keys are ephemeral."},
+        {"id": "B", "text": "Confidentiality of the established session key against passive eavesdroppers."},
+        {"id": "C", "text": "Authentication of the parties (you established a key with someone, but DH cannot tell you with whom)."},
+        {"id": "D", "text": "Establishment of a shared secret over a public channel."}
+      ],
+      "correctAnswer": "C",
+      "mechanisticExplanation": "DH gives you a key with whoever happened to be on the other end of the wire — possibly Mallory. Authentication requires a separate mechanism (digital signatures, certificates) bound to the DH exchange.",
+      "distractorAnalysis": {
+        "A": "**Provided** — Ephemeral DH provides forward secrecy.",
+        "B": "**Provided** — Passive eavesdroppers cannot derive $g^{ab}$ from $g^a, g^b$ alone.",
+        "D": "**Provided** — That is the entire purpose of DH."
+      },
+      "trapCategories": [
+        "category-error",
+        "not-provide-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q18",
+      "type": "SYNTHESIS",
+      "difficulty": "Advanced",
+      "topic": "Diffie-Hellman Limitations",
+      "stem": "Combining lecture material on PRNGs and DH, which architectural rule should govern session-key generation in a real protocol like TLS?",
+      "choices": [
+        {"id": "A", "text": "Generate $a$ and $b$ with a properly seeded, rollback-resistant PRNG; perform DH for forward secrecy; bind the exchange to authenticated identities (e.g., certificates) to defeat MITM."},
+        {"id": "B", "text": "Use a fixed seed for the PRNG so both parties derive the same $a$."},
+        {"id": "C", "text": "Skip DH and use a long-term shared secret directly."},
+        {"id": "D", "text": "Use Mallory's public key as a trust anchor."}
+      ],
+      "correctAnswer": "A",
+      "mechanisticExplanation": "Each lecture concept maps to a real-protocol requirement: the PRNG provides the randomness for $a, b$; DH gives forward secrecy; certificates close the MITM gap. TLS does exactly this.",
+      "distractorAnalysis": {
+        "B": "**Catastrophic** — A fixed seed eliminates per-session uniqueness.",
+        "C": "**Loses Forward Secrecy** — Long-term secrets are exactly what DHE protects against.",
+        "D": "**Adversary Trust** — Trusting an attacker is the canonical failure."
+      },
+      "trapCategories": [
+        "cross-cutting-synthesis"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q19",
+      "type": "MECHANISM",
+      "difficulty": "Core",
+      "topic": "Diffie-Hellman Assumption",
+      "stem": "The Diffie-Hellman assumption is *strictly stronger* than the discrete log assumption. What does this mean precisely?",
+      "choices": [
+        {"id": "A", "text": "If discrete log is hard, DH is automatically hard."},
+        {"id": "B", "text": "If DH is hard, discrete log might or might not be hard, but the converse is not known to hold: it is possible (in principle) for discrete log to be hard while DH is easy."},
+        {"id": "C", "text": "DH and discrete log are equivalent assumptions."},
+        {"id": "D", "text": "The discrete log assumption depends on the DH assumption."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "The slide notes that the best known DH attack is to first solve discrete log (recover $a$), then compute $g^{ab}$. So if DL is easy, DH is easy. But hypothetically, an attacker could compute $g^{ab}$ without ever recovering $a$ — making DH the stronger (more demanding) assumption.",
+      "distractorAnalysis": {
+        "A": "**Inverted Implication** — The implication goes the other direction in terms of difficulty.",
+        "C": "**Overstatement** — Equivalence is not proven.",
+        "D": "**Inverted** — DL is the more basic assumption."
+      },
+      "trapCategories": [
+        "mechanism-test",
+        "plausible-misconception"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    },
+    {
+      "id": "L05-Q20",
+      "type": "DISTRACTOR_TRAP",
+      "difficulty": "Advanced",
+      "topic": "Stream Cipher Construction",
+      "stem": "A junior engineer suggests a stream cipher built on a non-cryptographic PRNG (e.g., the standard library's Mersenne Twister) because \"it's faster.\" What is the precise security failure?",
+      "choices": [
+        {"id": "A", "text": "Mersenne Twister produces biased output."},
+        {"id": "B", "text": "Non-cryptographic PRNGs leak their internal state from a small number of outputs (Mersenne Twister is fully recoverable from 624 32-bit outputs), so the keystream is predictable, and IND-CPA is broken."},
+        {"id": "C", "text": "Mersenne Twister has too small an output space."},
+        {"id": "D", "text": "Mersenne Twister cannot be seeded."}
+      ],
+      "correctAnswer": "B",
+      "mechanisticExplanation": "Cryptographic PRNGs are designed so that no polynomial-time observer can predict future outputs given past ones. Non-cryptographic PRNGs like Mersenne Twister have known state-recovery attacks, so an attacker who sees enough output can predict all future keystream — equivalent to recovering the key.",
+      "distractorAnalysis": {
+        "A": "**Adjacent but Wrong** — MT is statistically uniform; the failure is *predictability*, not bias.",
+        "C": "**Misframed** — Output space is fine; security is the issue.",
+        "D": "**False** — MT is seeded."
+      },
+      "trapCategories": [
+        "applied-scenario",
+        "distractor-focused",
+        "mechanism-test"
+      ],
+      "diagramRef": null,
+      "gameRef": null
+    }
+  ]
+}
