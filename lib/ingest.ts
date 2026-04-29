@@ -119,26 +119,29 @@ async function upsertQuestions(
     return;
   }
 
-  await db
-    .insert(questions)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: [questions.lectureFK, questions.questionId],
-      set: {
-        type: sql`excluded.type`,
-        difficulty: sql`excluded.difficulty`,
-        topic: sql`excluded.topic`,
-        stem: sql`excluded.stem`,
-        choices: sql`excluded.choices`,
-        correctAnswer: sql`excluded.correct_answer`,
-        mechanisticExplanation: sql`excluded.mechanistic_explanation`,
-        distractorAnalysis: sql`excluded.distractor_analysis`,
-        trapCategories: sql`excluded.trap_categories`,
-        diagramRef: sql`excluded.diagram_ref`,
-        gameRef: sql`excluded.game_ref`
-      }
-    })
-    .run();
+  // Insert all rows with conflict resolution
+  for (const row of rows) {
+    await db
+      .insert(questions)
+      .values(row)
+      .onConflictDoUpdate({
+        target: [questions.lectureFK, questions.questionId],
+        set: {
+          type: row.type,
+          difficulty: row.difficulty,
+          topic: row.topic,
+          stem: row.stem,
+          choices: row.choices,
+          correctAnswer: row.correctAnswer,
+          mechanisticExplanation: row.mechanisticExplanation,
+          distractorAnalysis: row.distractorAnalysis,
+          trapCategories: row.trapCategories,
+          diagramRef: row.diagramRef,
+          gameRef: row.gameRef
+        }
+      })
+      .run();
+  }
 }
 
 async function upsertBank(
