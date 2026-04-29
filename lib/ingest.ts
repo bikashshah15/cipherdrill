@@ -19,11 +19,11 @@ type QuestionUpsertRow = {
   difficulty: QuestionBankQuestion["difficulty"];
   topic: string;
   stem: string;
-  choices: string;
+  choices: QuestionBankQuestion["choices"];
   correctAnswer: string;
   mechanisticExplanation: string;
-  distractorAnalysis: string;
-  trapCategories: string;
+  distractorAnalysis: QuestionBankQuestion["distractorAnalysis"];
+  trapCategories: QuestionBankQuestion["trapCategories"];
   diagramRef: string | null;
   gameRef: string | null;
 };
@@ -119,54 +119,26 @@ async function upsertQuestions(
     return;
   }
 
-  const values = rows.map(
-    (row) => sql`(
-      ${row.lectureFK},
-      ${row.questionId},
-      ${row.type},
-      ${row.difficulty},
-      ${row.topic},
-      ${row.stem},
-      ${row.choices},
-      ${row.correctAnswer},
-      ${row.mechanisticExplanation},
-      ${row.distractorAnalysis},
-      ${row.trapCategories},
-      ${row.diagramRef},
-      ${row.gameRef}
-    )`
-  );
-
-  await db.run(sql`
-    insert into questions (
-      lecture_fk,
-      question_id,
-      type,
-      difficulty,
-      topic,
-      stem,
-      choices,
-      correct_answer,
-      mechanistic_explanation,
-      distractor_analysis,
-      trap_categories,
-      diagram_ref,
-      game_ref
-    )
-    values ${sql.join(values, sql`, `)}
-    on conflict(lecture_fk, question_id) do update set
-      type = excluded.type,
-      difficulty = excluded.difficulty,
-      topic = excluded.topic,
-      stem = excluded.stem,
-      choices = excluded.choices,
-      correct_answer = excluded.correct_answer,
-      mechanistic_explanation = excluded.mechanistic_explanation,
-      distractor_analysis = excluded.distractor_analysis,
-      trap_categories = excluded.trap_categories,
-      diagram_ref = excluded.diagram_ref,
-      game_ref = excluded.game_ref
-  `);
+  await db
+    .insert(questions)
+    .values(rows)
+    .onConflictDoUpdate({
+      target: [questions.lectureFK, questions.questionId],
+      set: {
+        type: sql`excluded.type`,
+        difficulty: sql`excluded.difficulty`,
+        topic: sql`excluded.topic`,
+        stem: sql`excluded.stem`,
+        choices: sql`excluded.choices`,
+        correctAnswer: sql`excluded.correct_answer`,
+        mechanisticExplanation: sql`excluded.mechanistic_explanation`,
+        distractorAnalysis: sql`excluded.distractor_analysis`,
+        trapCategories: sql`excluded.trap_categories`,
+        diagramRef: sql`excluded.diagram_ref`,
+        gameRef: sql`excluded.game_ref`
+      }
+    })
+    .run();
 }
 
 async function upsertBank(
@@ -222,11 +194,11 @@ async function upsertBank(
       difficulty: question.difficulty,
       topic: question.topic,
       stem: question.stem,
-      choices: JSON.stringify(question.choices),
+      choices: question.choices,
       correctAnswer: question.correctAnswer,
       mechanisticExplanation: question.mechanisticExplanation,
-      distractorAnalysis: JSON.stringify(question.distractorAnalysis),
-      trapCategories: JSON.stringify(question.trapCategories),
+      distractorAnalysis: question.distractorAnalysis,
+      trapCategories: question.trapCategories,
       diagramRef: question.diagramRef,
       gameRef: question.gameRef
     }))
