@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ingestQuestionBanks } from "@/lib/ingest";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const ingestRequestSchema = z.object({}).strict();
 
