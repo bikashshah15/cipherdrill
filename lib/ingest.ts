@@ -1,15 +1,32 @@
 import Ajv, { type AnySchema, type ErrorObject, type ValidateFunction } from "ajv";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { getDb, schema, type CipherDrillDb } from "@/lib/db";
 import type {
   IngestSummary,
   IngestValidationError,
-  QuestionBank
+  QuestionBank,
+  QuestionBankQuestion
 } from "@/lib/types";
 
 const { lectures, questions } = schema;
+
+type QuestionUpsertRow = {
+  lectureFK: number;
+  questionId: string;
+  type: QuestionBankQuestion["type"];
+  difficulty: QuestionBankQuestion["difficulty"];
+  topic: string;
+  stem: string;
+  choices: string;
+  correctAnswer: string;
+  mechanisticExplanation: string;
+  distractorAnalysis: string;
+  trapCategories: string;
+  diagramRef: string | null;
+  gameRef: string | null;
+};
 
 function loadSchema(cwd: string): unknown {
   const schemaPath = path.join(cwd, "question-banks", "_schema.json");
@@ -94,6 +111,64 @@ function validateBank(
   return { bank: parsed, errors: [] };
 }
 
+async function upsertQuestions(
+  db: CipherDrillDb,
+  rows: QuestionUpsertRow[]
+): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const values = rows.map(
+    (row) => sql`(
+      ${row.lectureFK},
+      ${row.questionId},
+      ${row.type},
+      ${row.difficulty},
+      ${row.topic},
+      ${row.stem},
+      ${row.choices},
+      ${row.correctAnswer},
+      ${row.mechanisticExplanation},
+      ${row.distractorAnalysis},
+      ${row.trapCategories},
+      ${row.diagramRef},
+      ${row.gameRef}
+    )`
+  );
+
+  await db.run(sql`
+    insert into questions (
+      lecture_fk,
+      question_id,
+      type,
+      difficulty,
+      topic,
+      stem,
+      choices,
+      correct_answer,
+      mechanistic_explanation,
+      distractor_analysis,
+      trap_categories,
+      diagram_ref,
+      game_ref
+    )
+    values ${sql.join(values, sql`, `)}
+    on conflict(lecture_fk, question_id) do update set
+      type = excluded.type,
+      difficulty = excluded.difficulty,
+      topic = excluded.topic,
+      stem = excluded.stem,
+      choices = excluded.choices,
+      correct_answer = excluded.correct_answer,
+      mechanistic_explanation = excluded.mechanistic_explanation,
+      distractor_analysis = excluded.distractor_analysis,
+      trap_categories = excluded.trap_categories,
+      diagram_ref = excluded.diagram_ref,
+      game_ref = excluded.game_ref
+  `);
+}
+
 async function upsertBank(
   db: CipherDrillDb,
   bank: QuestionBank
@@ -138,42 +213,24 @@ async function upsertBank(
 
   const incomingQuestionIds = bank.questions.map((question) => question.id);
 
-  for (const question of bank.questions) {
-    await db
-      .insert(questions)
-      .values({
-        lectureFK: lecture.id,
-        questionId: question.id,
-        type: question.type,
-        difficulty: question.difficulty,
-        topic: question.topic,
-        stem: question.stem,
-        choices: question.choices,
-        correctAnswer: question.correctAnswer,
-        mechanisticExplanation: question.mechanisticExplanation,
-        distractorAnalysis: question.distractorAnalysis,
-        trapCategories: question.trapCategories,
-        diagramRef: question.diagramRef,
-        gameRef: question.gameRef
-      })
-      .onConflictDoUpdate({
-        target: [questions.lectureFK, questions.questionId],
-        set: {
-          type: question.type,
-          difficulty: question.difficulty,
-          topic: question.topic,
-          stem: question.stem,
-          choices: question.choices,
-          correctAnswer: question.correctAnswer,
-          mechanisticExplanation: question.mechanisticExplanation,
-          distractorAnalysis: question.distractorAnalysis,
-          trapCategories: question.trapCategories,
-          diagramRef: question.diagramRef,
-          gameRef: question.gameRef
-        }
-      })
-      .run();
-  }
+  await upsertQuestions(
+    db,
+    bank.questions.map((question) => ({
+      lectureFK: lecture.id,
+      questionId: question.id,
+      type: question.type,
+      difficulty: question.difficulty,
+      topic: question.topic,
+      stem: question.stem,
+      choices: JSON.stringify(question.choices),
+      correctAnswer: question.correctAnswer,
+      mechanisticExplanation: question.mechanisticExplanation,
+      distractorAnalysis: JSON.stringify(question.distractorAnalysis),
+      trapCategories: JSON.stringify(question.trapCategories),
+      diagramRef: question.diagramRef,
+      gameRef: question.gameRef
+    }))
+  );
 
   const existingQuestions = await db
     .select({ id: questions.id, questionId: questions.questionId })
